@@ -4,7 +4,6 @@ from flask import Flask, jsonify
 from marshmallow_sqlalchemy import ModelSchema
 from rest.query import QueryParam, create_query
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from tests.test_query import Level3, Root, Level1, Level2, ModelBase
 
@@ -58,41 +57,36 @@ class Level3Schema(ModelSchema):
         model = Level3
 
 
-def handle_request(models, foreign_keys_names, attr_names, **kwargs):
+def handle_request(query_params, **kwargs):
     ordered_ids = reversed(sorted(kwargs.keys()))
-    params = [QueryParam(
-        model=model,
-        attr_name=attr_name,
-        foreign_key_name=foreign_key_name,
-        foreign_key_value=kwargs[_id]
-    ) for _id, model, attr_name, foreign_key_name in zip(ordered_ids, models, attr_names, foreign_keys_names)]
-    # params = (
-    #     QueryParam(
-    #             model=Level3,
-    #             attr_name=None,
-    #             foreign_key_name='level2_pk',
-    #             foreign_key_value=kwargs['level_2_id'],
-    #     ),
-    #     QueryParam(
-    #             model=Level2,
-    #             attr_name='name',
-    #             foreign_key_name='level1_pk',
-    #             foreign_key_value=kwargs['level_1_id'],
-    #     ),
-    #     QueryParam(
-    #             model=Level1,
-    #             attr_name='name',
-    #             foreign_key_name='root_pk',
-    #             foreign_key_value=kwargs['level_0_id'],
-    #     ),
-    # )
+    params = [p._replace(foreign_key_value=kwargs[_id]) for p, _id in zip(query_params, ordered_ids)]
     items = create_query(db_session, params).all()
     return jsonify({'items': serialize_collection(Level3Schema(), items)})
 
-handler = partial(handle_request, (Level3, Level2, Level1), ('level2_pk', 'level1_pk', 'root_pk'), (None, 'name', 'name'))
 
-app.add_url_rule('/roots/<level_0_id>/level1s/<level_1_id>/level2s/<level_2_id>/level3s', endpoint='1', view_func=handler, methods=('GET',))
-# app.add_url_rule('/foos/<url_id>', view_func=handler.item_get_handler)
-# app.add_url_rule('/foos/<parent_id>/bars', endpoint='1', view_func=rel_handler.collection_get_handler)
-# app.add_url_rule('/foos/<parent_id>/bars/<relation_id>', endpoint='2', view_func=rel_handler.item_get_handler)
+query_params = (
+    QueryParam(
+            model=Level3,
+            attr_name=None,
+            foreign_key_name='level2_pk',
+            foreign_key_value=None
+    ),
+    QueryParam(
+            model=Level2,
+            attr_name='name',
+            foreign_key_name='level1_pk',
+            foreign_key_value=None
+    ),
+    QueryParam(
+            model=Level1,
+            attr_name='name',
+            foreign_key_name='root_pk',
+            foreign_key_value=None
+    ),
+)
+
+handler = partial(handle_request, query_params)
+
+app.add_url_rule('/roots/<level_0_id>/level1s/<level_1_id>/level2s/<level_2_id>/level3s', endpoint='1',
+                 view_func=handler, methods=('GET',))
 app.run()
