@@ -57,11 +57,11 @@ class Level3Schema(ModelSchema):
         model = Level3
 
 
-def handle_request(query_params, **kwargs):
+def handle_request(query_params, schema, **kwargs):
     ordered_ids = reversed(sorted(kwargs.keys()))
     params = [p._replace(foreign_key_value=kwargs[_id]) for p, _id in zip(query_params, ordered_ids)]
     items = create_query(db_session, params).all()
-    return jsonify({'items': serialize_collection(Level3Schema(), items)})
+    return jsonify({'items': serialize_collection(schema(), items)})
 
 
 query_params = (
@@ -85,7 +85,12 @@ query_params = (
     ),
 )
 
-handler = partial(handle_request, query_params)
+def params_from_path(path):
+    pass
+
+
+schema_meta = type('Meta', (object,), {'model': Level3})
+handler = partial(handle_request, query_params, type('Level3Schema', (ModelSchema,), {'Meta': schema_meta}))
 
 app.add_url_rule('/roots/<level_0_id>/level1s/<level_1_id>/level2s/<level_2_id>/level3s', endpoint='1',
                  view_func=handler, methods=('GET',))
