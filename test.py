@@ -85,10 +85,6 @@ query_params = (
     ),
 )
 
-def params_from_path(path):
-    pass
-
-
 schema_meta = type('Meta', (object,), {'model': Level3})
 handler = partial(handle_request, query_params, type('Level3Schema', (ModelSchema,), {'Meta': schema_meta}))
 

@@ -8,11 +8,11 @@ class HierarchyTraverserTest(TestCase):
 
     def setUp(self):
         self.g = nx.DiGraph()
-        self.g.add_edge('root', 'level1_0', rel=RelationshipInfo('level1_0_s', 'root_pk'))
-        self.g.add_edge('root', 'level1_1', rel=RelationshipInfo('level1_1_s', 'root_pk'))
-        self.g.add_edge('level1_0', 'level2_0', rel=RelationshipInfo('level2_0_s', 'level1_0_pk'))
-        self.g.add_edge('level1_0', 'level2_1', rel=RelationshipInfo('level2_2_s', 'level1_0_pk'))
-        self.g.add_edge('level2_0', 'level3_0', rel=RelationshipInfo('level3_0_s', 'level2_0_pk'))
+        self.g.add_edge('root', 'level1_0')
+        self.g.add_edge('root', 'level1_1')
+        self.g.add_edge('level1_0', 'level2_0')
+        self.g.add_edge('level1_0', 'level2_1')
+        self.g.add_edge('level2_0', 'level3_0')
 
     def test_unique_backward_paths(self):
         correct_paths = [

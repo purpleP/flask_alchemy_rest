@@ -9,7 +9,7 @@ from sqlalchemy.orm import RelationshipProperty
 RELATION_BLACKLIST = ('query', 'query_class', '_sa_class_manager',
                       '_decl_class_registry')
 
-RelationshipInfo = namedtuple('RelationshipInfo', 'rel_name fk_name')
+RelationshipInfo = namedtuple('RelationshipInfo', 'fk_linked_attr_name fk_attr_name')
 
 
 def create_hierarchy(root_model):
