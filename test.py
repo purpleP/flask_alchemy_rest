@@ -10,7 +10,7 @@ from tests.test_query import Level3, Root, Level1, Level2, ModelBase
 app = Flask(__name__)
 
 db_url = 'sqlite:///:memory:'
-engine = create_engine(db_url, echo=True, convert_unicode=True)
+engine = create_engine(db_url, convert_unicode=True)
 db_session = sessionmaker(autocommit=False,
                           autoflush=False,
                           bind=engine)()
@@ -84,6 +84,7 @@ query_params = (
             foreign_key_value=None
     ),
 )
+
 
 schema_meta = type('Meta', (object,), {'model': Level3})
 handler = partial(handle_request, query_params, type('Level3Schema', (ModelSchema,), {'Meta': schema_meta}))
