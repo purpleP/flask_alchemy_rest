@@ -10,6 +10,7 @@ RELATION_BLACKLIST = ('query', 'query_class', '_sa_class_manager',
                       '_decl_class_registry')
 
 RelationshipInfo = namedtuple('RelationshipInfo', 'fk_linked_attr_name fk_attr_name')
+ModelInfo = namedtuple('ModelInfo', 'model url_attr')
 
 
 def create_hierarchy(root_model):

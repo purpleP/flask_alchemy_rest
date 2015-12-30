@@ -66,7 +66,7 @@ def params_from_path(graph, path):
                  for r in relationships)
 
 
-def url_for_path(graph, path):
+def urls_for_path(path):
     resources_names = [model.__tablename__ for model in reversed(path)]
     url_parts = [''] + list(itertools.chain(
             *[[resources_name, '<level_{}_id>'.format(i)] for i, resources_name in enumerate(resources_names)]
