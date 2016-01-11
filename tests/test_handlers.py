@@ -59,8 +59,12 @@ correct_full_query_params = (
 
 
 def test_full_query_params():
-    _, full_params = full_query_params(initial_query_params, level_0_id='root', level_1_id='level1',
-                                       level_2_id='level2')
+    _, full_params = full_query_params(
+            initial_query_params,
+            level_0_id='root',
+            level_1_id='level1',
+            level_2_id='level2'
+    )
     assert correct_full_query_params == full_params
 
 
@@ -90,7 +94,6 @@ def test_post_handler(client):
     errors_data = json.loads(response.data)
     assert len(errors_data['name']) == 1
     assert errors_data['name'][0] == u'Missing data for required field.'
-
 
 
 def items():
@@ -169,10 +172,8 @@ def get_handler(actual_handler, session, model, params, schema_based_serializer,
 def post_handler(actual_handler, session, model, params, schema_based_deserializer, url_key, **kwargs):
     schema = schema_class_for_model(model)()
     deserializer = partial(schema_based_deserializer, schema, session)
-    actual_poster = partial(actual_handler, session, params, deserializer, url_key,  **kwargs)
+    actual_poster = partial(actual_handler, session, params, deserializer, url_key, **kwargs)
     return partial(post_flask_wrapper, actual_poster)
-
-
 
 
 def correct_collection_data():

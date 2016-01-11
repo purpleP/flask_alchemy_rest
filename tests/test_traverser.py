@@ -1,41 +1,35 @@
+from pytest import fixture
+
 import networkx as nx
-from unittest import TestCase
 
-from rest.hierarchy_traverser import RelationshipInfo, unique_backward_paths, subgraphs, all_subgraphs
+from rest.hierarchy_traverser import full_paths, sublists
 
 
-class HierarchyTraverserTest(TestCase):
+@fixture
+def graph():
+    g = nx.DiGraph()
+    g.add_edge('0', '1.0')
+    g.add_edge('1.0', '2.0')
+    g.add_edge('1.0', '2.1')
+    g.add_edge('2.0', '3.0')
+    g.add_edge('2.1', '3.1')
+    return g
 
-    def setUp(self):
-        self.g = nx.DiGraph()
-        self.g.add_edge('root', 'level1_0')
-        self.g.add_edge('root', 'level1_1')
-        self.g.add_edge('level1_0', 'level2_0')
-        self.g.add_edge('level1_0', 'level2_1')
-        self.g.add_edge('level2_0', 'level3_0')
 
-    def test_unique_backward_paths(self):
-        correct_paths = [
-            ['level3_0', 'level2_0', 'level1_0', 'root'],
-            ['level2_0', 'level1_0', 'root'],
-            ['level2_1', 'level1_0', 'root'],
-            ['level1_0', 'root'],
-            ['level1_1', 'root'],
-            ['root'],
-        ]
-        paths = unique_backward_paths(self.g)
-        self.assertEquals(len(correct_paths), len(paths))
-        self.assertTrue(all(p in paths for p in correct_paths))
+def test_sublist():
+    a = xrange(3)
+    correct_sublists = [
+        [0],
+        [0, 1],
+        [0, 1, 2],
+    ]
+    assert map(list, sublists(a)) == correct_sublists
 
-    def test_subgraphs(self):
-        correct_subgraphs = [
-            ['level3_0', 'level2_1', 'level1_1', 'level2_0', 'level1_0', 'root'],
-            ['level1_0', 'level2_0', 'root'],
-            ['level1_0', 'root'],
-            ['root'],
-        ]
-        layers = [s.nodes() for s in all_subgraphs(self.g)]
-        self.assertEquals(len(correct_subgraphs), len(layers))
-        self.assertSequenceEqual(map(len, correct_subgraphs), map(len, layers))
-        self.assertTrue(all([(set(cs) == set(layer)) for cs, layer in zip(correct_subgraphs, layers)]))
 
+def test_paths(graph):
+    correct_paths = [
+        ['0', '1.0', '2.1', '3.1'],
+        ['0', '1.0', '2.0', '3.0'],
+    ]
+    ps = full_paths(graph, '0')
+    assert correct_paths == list(map(list, ps))

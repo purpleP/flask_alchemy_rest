@@ -1,7 +1,5 @@
-import itertools
+from itertools import chain, groupby, islice
 from collections import namedtuple
-
-import operator
 
 from sqlalchemy.ext.associationproxy import AssociationProxy
 from sqlalchemy.orm import RelationshipProperty
@@ -11,16 +9,6 @@ RELATION_BLACKLIST = ('query', 'query_class', '_sa_class_manager',
 
 RelationshipInfo = namedtuple('RelationshipInfo', 'fk_linked_attr_name fk_attr_name')
 ModelInfo = namedtuple('ModelInfo', 'model url_attr')
-
-
-def create_hierarchy(root_model):
-    return
-
-
-def unique_backward_paths(graph):
-    return remove_duplicates(
-            reduce(operator.concat, [backward_hierarchies(g) for g in all_subgraphs(graph)], [])
-    )
 
 
 def get_rels(model):
@@ -49,41 +37,32 @@ def get_related_association_proxy_model(attr):
     return None
 
 
+def create_hierarchy(root_model):
+    return
+
+
 def leaves(graph):
     return [n for n in graph.nodes_iter()
             if graph.out_degree(n) == 0 and
             graph.in_degree(n) in (0, 1)]
 
 
-def parents_in_order(g, leaf):
-    predecessors = g.predecessors(leaf)
-    if len(predecessors) == 0:
-        return []
+def all_paths(graph, node):
+    subs = chain.from_iterable(map(sublists, full_paths(graph, node)))
+    return remove_duplicates(subs)
+
+
+def sublists(iterable):
+    return (islice(iterable, i + 1) for i, _ in enumerate(iterable))
+
+
+def full_paths(graph, node):
+    if graph.out_degree(node) == 0:
+        return iter([[node]])
     else:
-        return [predecessors[0]] + parents_in_order(g, predecessors[0])
-
-
-def without_leaves(graph):
-    g = graph.copy()
-    g.remove_nodes_from(leaves(graph))
-    return g
-
-
-def all_subgraphs(graph):
-    return [graph] + subgraphs(graph)
-
-
-def subgraphs(graph):
-    if graph.size() == 0:
-        return []
-    else:
-        subgraph = without_leaves(graph)
-        return [subgraph] + subgraphs(subgraph)
-
-
-def backward_hierarchies(graph):
-    return [[leaf] + parents_in_order(graph, leaf) for leaf in leaves(graph)]
+        pss = (full_paths(graph, s) for s in graph.successors_iter(node))
+        return (chain([node], path) for ps in pss for path in ps)
 
 
 def remove_duplicates(list_of_lists):
-    return [k for k, _ in itertools.groupby(sorted(list_of_lists))]
+    return [k for k, _ in groupby(sorted(list_of_lists))]

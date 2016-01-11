@@ -131,6 +131,7 @@ def test_query_subcollection(state):
     assert state[2] in queried_items
     assert len(queried_items) == 1
 
+
 def test_query_item(state):
     item = item_query(state[0], level3_params, 'name', 'level3').one()
     assert state[2] == item
