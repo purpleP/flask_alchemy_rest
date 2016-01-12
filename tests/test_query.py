@@ -1,6 +1,7 @@
 from pytest import fixture
 
-from rest.query import create_query, QueryParam, foreign_key_query, subcollection_query, item_query
+from rest.query import create_query, QueryParam, foreign_key_query, subcollection_query, item_query, \
+    top_level_collection_query
 from sqlalchemy import create_engine, String, Column, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -49,6 +50,15 @@ class Level3(ModelBase):
             return False
         return self.name == other.name and self.level2_pk == other.level2_pk
 
+
+root_params = (
+    QueryParam(
+        model=Root,
+        attr_name=None,
+        foreign_key_name=None,
+        foreign_key_value=None,
+    ),
+)
 
 level3_params = (
     QueryParam(
@@ -109,7 +119,7 @@ def state():
     root.level1s.append(l1)
     _session.add(root)
     _session.commit()
-    return _session, level2, level3
+    return _session, level2, level3, l1, root
 
 
 def test_query(state):
@@ -132,6 +142,17 @@ def test_query_subcollection(state):
     assert len(queried_items) == 1
 
 
+def test_query_top_level_collection(state):
+    queried_items = top_level_collection_query(state[0], root_params).all()
+    assert state[4] in queried_items
+    assert len(queried_items) == 1
+
+
 def test_query_item(state):
     item = item_query(state[0], level3_params, 'name', 'level3').one()
     assert state[2] == item
+
+
+def test_query_top_level_item(state):
+    item = item_query(state[0], root_params, 'name', 'root').one()
+    assert state[4] == item

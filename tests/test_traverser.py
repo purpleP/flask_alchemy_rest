@@ -17,13 +17,13 @@ def graph():
 
 
 def test_sublist():
-    a = xrange(3)
+    a = range(3)
     correct_sublists = [
         [0],
         [0, 1],
         [0, 1, 2],
     ]
-    assert map(list, sublists(a)) == correct_sublists
+    assert sublists(a) == correct_sublists
 
 
 def test_paths(graph):
@@ -32,4 +32,4 @@ def test_paths(graph):
         ['0', '1.0', '2.0', '3.0'],
     ]
     ps = full_paths(graph, '0')
-    assert correct_paths == list(map(list, ps))
+    assert correct_paths == ps

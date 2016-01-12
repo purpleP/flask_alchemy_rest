@@ -1,7 +1,6 @@
 from collections import namedtuple
 
 QueryParam = namedtuple('QueryParam', 'model attr_name foreign_key_name foreign_key_value')
-Relationship = namedtuple('Relationship', 'previous_level current_level next_level')
 
 
 def create_query(db_session, query_params):
@@ -52,10 +51,19 @@ def foreign_key_query(db_session, query_params):
     return query.filter(getattr(model_to_query, query_params[0].foreign_key_name) == filter_value)
 
 
-# TODO make every node connected to itself with relationship with None attributes
-# then there would be no need in try except
-def get_attr_name(graph, current, previous):
-    try:
-        return graph[current][previous]['rel'].fk_linked_attr_name
-    except Exception:
-        return None
+def query_item(db_session, model, attr_to_query, attr_to_compare, value_to_compare):
+    query = query_coll(db_session, model, attr_to_query)
+    return query.filter(getattr(model, attr_to_compare) == value_to_compare)
+
+
+def query_coll(db_session, model, attr_to_query):
+    return db_session.query(model)
+
+
+def query_sub(db_session, params):
+    if len(params) == 0:
+        model, fk_attr, parent_key, parent_key_value = params[0]
+        filter = query_item(db_session, model, pa)
+    else:
+        model, fk_value, attribute = other_params[0]
+        filter = query_item(db_session, model, fk_value, attribute, other_params[1:])
