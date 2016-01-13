@@ -1,4 +1,3 @@
-from pymonad import curry
 from sqlalchemy.ext.associationproxy import AssociationProxy
 from sqlalchemy.orm import RelationshipProperty
 
@@ -38,7 +37,6 @@ def pk_attr_name(model):
     return find(is_pk(model), attrs_names)
 
 
-@curry
 def is_pk(model, attr_name):
     try:
         return getattr(model, attr_name).primary_key

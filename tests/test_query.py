@@ -61,7 +61,11 @@ def items():
 
 @fixture
 def state():
-    engine = create_engine('sqlite:///:memory:', echo=False, convert_unicode=True)
+    engine = create_engine(
+        'sqlite:///:memory:',
+        echo=False,
+        convert_unicode=True
+    )
     _session = sessionmaker(autocommit=False,
                             autoflush=False,
                             bind=engine)()
@@ -77,23 +81,27 @@ def state():
     return _session, ([level3], [level2], [l1], [root])
 
 
-def test_create_q(state):
+def test_create_query(state):
     ses, models = state
     params = (
-        (Level3, 'name', 'level3', 'level2_pk', 'name'),
-        (Level2, 'name', 'level2', 'level1_pk', 'name'),
-        (Level1, 'name', 'level1', 'root_pk', 'name'),
-        (Root, 'name', 'root', None, None),
+        (Level3, 'name', 'level2_pk', 'name'),
+        (Level2, 'name', 'level1_pk', 'name'),
+        (Level1, 'name', 'root_pk', 'name'),
+        (Root, 'name', None, None),
     )
+    filter_values = ['level3', 'level2', 'level1', 'root']
     pss = [list(reversed(sl)) for sl in sublists(list(reversed(params)))]
-    [check(ses, ps, ms) for ms, ps in zip(reversed(models), pss)]
+    fvss = [list(reversed(fvs)) for fvs in sublists(list(reversed(filter_values)))]
+    [check(ses, ps, ms, fvs)
+     for ms, ps, fvs in zip(reversed(models), pss, fvss)]
+    fvss[-1] = fvss[-2]
+    [check(ses, ps, ms, fvs)
+     for ms, ps, fvs in zip(reversed(models), pss, fvss)]
 
 
-def check(session, params, list):
-    cq, iq, _ = create_queries(session, params)
-    _, _, filter_value, _, _ = params[0]
+def check(session, params, list, filter_values):
+    cq, iq, _ = create_queries(session, params, filter_values)
     assert list == cq.all()
-    assert find(lambda i: i.name == filter_value, list) == iq.one()
-
-
+    if len(filter_values) > 0:
+        assert find(lambda i: i.name == filter_values[0], list) == iq.one()
 
