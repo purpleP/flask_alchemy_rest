@@ -2,12 +2,10 @@ from collections import namedtuple
 from functools import partial
 from itertools import chain
 
-from pymonad import curry
 from rest.handlers import get_collection_item, post_flask_wrapper, post_item, get_collection, \
     serialize_item, serialize_collection, deserialize_item, schema_class_for_model
 from rest.hierarchy_traverser import all_paths
 from rest.introspect import pk_attr_name
-from rest.query import QueryParam
 
 EndpointParams = namedtuple('EndpointParams', ['rule', 'endpoint', 'view_func', 'methods'])
 
@@ -115,34 +113,11 @@ def get_collection_params(collection_path, db_session, model_config, query_param
     )
 
 
-def params_from_path(graph, path):
-    rev_path = list(reversed(path))
-    triples = [(prev, cur, next)
-               for (prev, cur, next) in
-               zip([None] + rev_path, rev_path, (rev_path + [None])[1:])]
-
-    t = tuple(
-            QueryParam(
-                    model=current,
-                    attr_name=get_attr_name(graph, current, child),
-                    foreign_key_name=get_fk_name(graph, parent, current),
-                    foreign_key_value=None
-            )
-            for child, current, parent in triples
-    )
-    return t
-
-
 def get_fk_name(graph, parent, child):
     if child:
         return graph[parent][child]['rel'].fk_attr_name
     else:
         return None
-
-
-@curry
-def config_name_provider(config, model):
-    return config[model]['url_name']
 
 
 def urls_for_path(path, config):
@@ -159,5 +134,5 @@ def urls_for_path(path, config):
 def get_attr_name(graph, parent, child):
     try:
         return graph[parent][child]['rel'].fk_linked_attr_name
-    except Exception:
+    except KeyError:
         return None

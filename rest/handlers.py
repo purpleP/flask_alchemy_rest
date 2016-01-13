@@ -3,39 +3,39 @@ from functools import partial
 
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
-from pymonad import curry
-from rest.query import foreign_key_query, collection_query, item_query
+from rest.query import create_queries
 from sqlalchemy.orm.exc import NoResultFound
 
 
 def get_collection(db_session, query_params, serializer, **kwargs):
     _, params = full_query_params(query_params, **kwargs)
-    items = collection_query(db_session, params).all()
+    collection_query, _, _ = create_queries(db_session, params)
+    items = collection_query.all()
     return jsonify({'items': serializer(items)})
 
 
-def get_collection_item(db_session, query_params, serializer, primary_key_attr_name, **kwargs):
+def get_item(db_session, query_params, serializer, **kwargs):
     ordered_ids, params = full_query_params(query_params, **kwargs)
     # TODO probably it would be more reasonable to query all and then check if there is only one
+    _, item_query, _ = create_queries(db_session, params)
     try:
-        item = item_query(db_session, params, primary_key_attr_name, kwargs[ordered_ids[-1]]).one()
+        item = item_query.one()
         return jsonify(serializer(item))
     except NoResultFound:
         return 'No such resource', 404
 
 
-def post_item(db_session, query_params, deserializer, key_to_use_in_url, item_as_dict, **kwargs):
+def post_item(db_session, query_params, deserializer, item_as_dict, **kwargs):
     _, params = full_query_params(query_params, **kwargs)
-    fk_name = params[0].foreign_key_name
-    fk, = foreign_key_query(db_session, params[1:]).one()
+    _, _, fkq, = create_queries(db_session, query_params)
     try:
         item = deserializer(item_as_dict)
     except SchemaError as e:
         return json.dumps(e.errors), 400
-    setattr(item, fk_name, fk)
+    setattr(item, params[0].fk_attr, fkq.one())
     db_session.add(item)
     db_session.commit()
-    return jsonify({'id': getattr(item, key_to_use_in_url)})
+    return jsonify({'id': getattr(item, params[0].exposed_attr)})
 
 
 class SchemaError(ValueError):
@@ -64,7 +64,7 @@ def serialize_collection(schema, collection):
 
 def full_query_params(query_params, **kwargs):
     ordered_ids = sorted(kwargs.keys())
-    full_qp_reversed = [p._replace(foreign_key_value=kwargs[_id])
+    full_qp_reversed = [p._replace(exposed_attr_value=kwargs[_id])
                         for p, _id in zip(reversed(query_params), ordered_ids)]
     return ordered_ids, tuple(reversed(full_qp_reversed))
 
@@ -78,7 +78,6 @@ def schema_class_for_model(model_class):
     )
 
 
-def post_flask_wrapper(actual_poster, **kwargs):
+def flask_post_wrapper(actual_poster, **kwargs):
     return actual_poster(request.json, **kwargs)
-
 

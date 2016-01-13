@@ -2,8 +2,7 @@ from pytest import fixture
 from rest.hierarchy_traverser import sublists
 from rest.introspect import find
 
-from rest.query import create_query, QueryParam, foreign_key_query, subcollection_query, item_query, \
-    top_level_collection_query, create_query
+from rest.query import create_queries
 from sqlalchemy import create_engine, String, Column, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -53,52 +52,6 @@ class Level3(ModelBase):
         return self.name == other.name and self.level2_pk == other.level2_pk
 
 
-root_params = (
-    QueryParam(
-        model=Root,
-        attr_name=None,
-        foreign_key_name=None,
-        foreign_key_value=None,
-    ),
-)
-
-level3_params = (
-    QueryParam(
-            model=Level3,
-            attr_name=None,
-            foreign_key_name='level2_pk',
-            foreign_key_value='level2',
-    ),
-    QueryParam(
-            model=Level2,
-            attr_name='name',
-            foreign_key_name='level1_pk',
-            foreign_key_value='level1',
-    ),
-    QueryParam(
-            model=Level1,
-            attr_name='name',
-            foreign_key_name='root_pk',
-            foreign_key_value='root',
-    ),
-)
-
-level2_params = (
-    QueryParam(
-            model=Level2,
-            attr_name=None,
-            foreign_key_name='level1_pk',
-            foreign_key_value='level1',
-    ),
-    QueryParam(
-            model=Level1,
-            attr_name='name',
-            foreign_key_name='root_pk',
-            foreign_key_value='root',
-    ),
-)
-
-
 def items():
     level2 = Level2(name=u'level2')
     level3 = Level3(name=u'level3')
@@ -137,7 +90,7 @@ def test_create_q(state):
 
 
 def check(session, params, list):
-    cq, iq, _ = create_query(session, params)
+    cq, iq, _ = create_queries(session, params)
     _, _, filter_value, _, _ = params[0]
     assert list == cq.all()
     assert find(lambda i: i.name == filter_value, list) == iq.one()
