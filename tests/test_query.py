@@ -1,7 +1,9 @@
 from pytest import fixture
+from rest.hierarchy_traverser import sublists
+from rest.introspect import find
 
 from rest.query import create_query, QueryParam, foreign_key_query, subcollection_query, item_query, \
-    top_level_collection_query
+    top_level_collection_query, create_query
 from sqlalchemy import create_engine, String, Column, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -119,40 +121,26 @@ def state():
     root.level1s.append(l1)
     _session.add(root)
     _session.commit()
-    return _session, level2, level3, l1, root
+    return _session, ([level3], [level2], [l1], [root])
 
 
-def test_query(state):
-    level2 = create_query(state[0], level2_params).one()
-    assert level2 == state[1]
-    level3 = create_query(state[0], level3_params).one()
-    assert level3 == state[2]
+def test_create_q(state):
+    ses, models = state
+    params = (
+        (Level3, 'name', 'level3', 'level2_pk', 'name'),
+        (Level2, 'name', 'level2', 'level1_pk', 'name'),
+        (Level1, 'name', 'level1', 'root_pk', 'name'),
+        (Root, 'name', 'root', None, None),
+    )
+    pss = [list(reversed(sl)) for sl in sublists(list(reversed(params)))]
+    [check(ses, ps, ms) for ms, ps in zip(reversed(models), pss)]
 
 
-def test_query_foreign_key(state):
-    fk = foreign_key_query(state[0], level3_params[2:]).one()
-    assert fk == (u'level1',)
-    fk = foreign_key_query(state[0], level3_params[1:]).one()
-    assert fk == (u'level2',)
+def check(session, params, list):
+    cq, iq, _ = create_query(session, params)
+    _, _, filter_value, _, _ = params[0]
+    assert list == cq.all()
+    assert find(lambda i: i.name == filter_value, list) == iq.one()
 
 
-def test_query_subcollection(state):
-    queried_items = subcollection_query(state[0], level3_params).all()
-    assert state[2] in queried_items
-    assert len(queried_items) == 1
 
-
-def test_query_top_level_collection(state):
-    queried_items = top_level_collection_query(state[0], root_params).all()
-    assert state[4] in queried_items
-    assert len(queried_items) == 1
-
-
-def test_query_item(state):
-    item = item_query(state[0], level3_params, 'name', 'level3').one()
-    assert state[2] == item
-
-
-def test_query_top_level_item(state):
-    item = item_query(state[0], root_params, 'name', 'root').one()
-    assert state[4] == item
