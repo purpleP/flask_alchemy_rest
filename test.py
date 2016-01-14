@@ -1,7 +1,8 @@
 from flask import Flask
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from tests.test_query import Level3, Root, Level1, Level2, ModelBase
+from tests.test_query import Level3, Root, Level1, Level2
+from tests.fixtures import ModelBase, Root, Level1, Level2, Level3
 
 app = Flask(__name__)
 

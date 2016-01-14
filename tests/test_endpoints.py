@@ -1,22 +1,24 @@
 import networkx as nx
+from flask import Flask
 from pytest import fixture
-from rest.endpoints import params_from_path, urls_for_path, default_config, register_handlers
-from rest.hierarchy_traverser import RelationshipInfo, sublists
-from rest.query import QueryParam
-from tests.test_handlers import create_app, create_session, level3_item_url
-from tests.test_query import Level3, Level2, Level1, Root
+from rest.endpoints import params_from_path, urls_for_path, default_config, \
+    register_handlers
+from rest.hierarchy_traverser import sublists
+from tests.fixtures import Root, Level1, Level2, Level3, params, state, \
+    level3_item_url
 
 g = nx.DiGraph()
-g.add_edge(Root, Level1, rel=RelationshipInfo('name', 'root_pk'))
-g.add_edge(Level1, Level2, rel=RelationshipInfo('name', 'level1_pk'))
-g.add_edge(Level2, Level3, rel=RelationshipInfo('name', 'level2_pk'))
+g.add_edge(Root, Root, fk_attr=None, linked_attr=None)
+g.add_edge(Root, Level1, linked_attr='name', fk_attr='root_pk')
+g.add_edge(Level1, Level2, linked_attr='name', fk_attr='level1_pk')
+g.add_edge(Level2, Level3, linked_attr='name', fk_attr='level2_pk')
 path = [Root, Level1, Level2, Level3]
 
 
 def test_register_handlers(config):
-    app = create_app()
+    app = Flask(__name__)
     client = app.test_client()
-    session = create_session()
+    session, _ = state()
     register_handlers(
             graph=g,
             root=Root,
@@ -25,16 +27,15 @@ def test_register_handlers(config):
             app=app
     )
     urls_parts = level3_item_url.split('/')
-    urls = ['/'.join(sl) for sl in sublists(urls_parts)]
+    urls = ['/'.join(sl) for sl in sublists(urls_parts)][1:]
     for url in urls:
         response = client.get(url)
-        assert response.status == 200
+        assert response.status_code == 200
 
 
-def test_params_from_path():
-    correct_params = level_3_params()
-    p = params_from_path(g, path)
-    assert p == correct_params
+def test_params_from_path(config):
+    p = params_from_path(g, path, config)
+    assert p == params()
 
 
 def test_default_config(config):
@@ -54,46 +55,3 @@ def test_url_for_path(config):
 def config():
     return default_config(path)
 
-
-@fixture
-def level_3_params():
-    correct_params = (
-        QueryParam(
-                model=Level3,
-                attr_name=None,
-                foreign_key_name='level2_pk',
-                foreign_key_value=None
-        ),
-        QueryParam(
-                model=Level2,
-                attr_name='name',
-                foreign_key_name='level1_pk',
-                foreign_key_value=None
-        ),
-        QueryParam(
-                model=Level1,
-                attr_name='name',
-                foreign_key_name='root_pk',
-                foreign_key_value=None
-        )
-    )
-    return correct_params
-
-
-@fixture
-def level_2_params():
-    correct_params = (
-        QueryParam(
-                model=Level2,
-                attr_name=None,
-                foreign_key_name='level1_pk',
-                foreign_key_value=None
-        ),
-        QueryParam(
-                model=Level1,
-                attr_name='name',
-                foreign_key_name='root_pk',
-                foreign_key_value=None
-        ),
-    )
-    return correct_params

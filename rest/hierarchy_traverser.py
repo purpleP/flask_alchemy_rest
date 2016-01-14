@@ -1,10 +1,8 @@
 from collections import namedtuple
 from itertools import chain, groupby, islice
 
-RelationshipInfo = namedtuple('RelationshipInfo', 'fk_linked_attr_name fk_attr_name')
+RelationshipInfo = namedtuple('RelationshipInfo', 'linked_attr fk_attr')
 ModelInfo = namedtuple('ModelInfo', 'model url_attr')
-
-
 
 
 def create_hierarchy(root_model):
@@ -30,7 +28,8 @@ def full_paths(graph, node):
     if graph.out_degree(node) == 0:
         return iter([[node]])
     else:
-        pss = [full_paths(graph, s) for s in graph.successors_iter(node)]
+        pss = [full_paths(graph, s)
+               for s in graph.successors_iter(node) if s != node]
         return [list(chain([node], path)) for ps in pss for path in ps]
 
 

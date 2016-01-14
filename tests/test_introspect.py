@@ -1,5 +1,5 @@
 from rest.introspect import pk_attr_name
-from tests.test_query import Root
+from tests.fixtures import Root
 
 
 def test_pk_name_for_model():

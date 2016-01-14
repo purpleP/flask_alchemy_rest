@@ -2,12 +2,15 @@ from collections import namedtuple
 from functools import partial
 from itertools import chain
 
-from rest.handlers import get_collection_item, post_flask_wrapper, post_item, get_collection, \
-    serialize_item, serialize_collection, deserialize_item, schema_class_for_model
+from rest.handlers import get_item, flask_post_wrapper, post_item, \
+    get_collection, \
+    serialize_item, serialize_collection, deserialize_item, \
+    schema_class_for_model
 from rest.hierarchy_traverser import all_paths
 from rest.introspect import pk_attr_name
 
-EndpointParams = namedtuple('EndpointParams', ['rule', 'endpoint', 'view_func', 'methods'])
+EndpointParams = namedtuple('EndpointParams',
+                            ['rule', 'endpoint', 'view_func', 'methods'])
 
 
 # This class could be used instead of dict to simplify testing a little
@@ -34,7 +37,10 @@ def register_handlers(graph, root, config, db_session, app):
 
 
 def register_handler(app, endpoint_params):
-    app.add_url_rule(**endpoint_params)
+    for ep in endpoint_params:
+        app.add_url_rule(**ep._asdict())
+        app.add_url_rule(**ep._asdict())
+        app.add_url_rule(**ep._asdict())
 
 
 def default_config(models, db_session=None):
@@ -52,27 +58,41 @@ def default_cfg_for_model(model, db_session=None):
                 schema_class_for_model(model),
                 db_session
         ),
-        'attr_to_use_in_url': pk_attr_name(model)
+        'exposed_attr': pk_attr_name(model)
     }
+
+
+def params_from_path(graph, path, config):
+    p = list(reversed(path)) + [path[0]]
+    return tuple((
+                child,
+                config[child]['exposed_attr'],
+                graph[parent][child]['fk_attr'],
+                graph[parent][child]['linked_attr']
+            )
+            for child, parent in zip(p, p[1:]))
 
 
 def endpoint_params_for_path(path, config, db_session, graph):
     collection_path, item_path = urls_for_path(path, config)
-    query_params = params_from_path(graph, path)
+    query_params = params_from_path(graph, path, config)
     model_cfg = config[path[-1]]
     return (
-        get_collection_params(collection_path, db_session, model_cfg, query_params),
-        get_collection_item_params(item_path, db_session, model_cfg, query_params),
+        get_collection_params(collection_path, db_session, model_cfg,
+                              query_params),
+        get_collection_item_params(item_path, db_session, model_cfg,
+                                   query_params),
         post_item_params(collection_path, db_session, model_cfg, query_params),
     )
 
 
-def get_collection_item_params(item_path, db_session, model_config, query_params):
+def get_collection_item_params(item_path, db_session, model_config,
+                               query_params):
     return EndpointParams(
             rule=item_path,
             endpoint=item_path,
             view_func=partial(
-                    get_collection_item,
+                    get_item,
                     db_session,
                     query_params,
                     model_config['item_serializer']
@@ -86,20 +106,21 @@ def post_item_params(collection_path, db_session, model_config, query_params):
             rule=collection_path,
             endpoint=collection_path + 'post',
             view_func=partial(
-                    post_flask_wrapper,
+                    flask_post_wrapper,
                     partial(
                             post_item,
                             db_session,
                             query_params,
                             model_config['item_deserializer'],
-                            model_config['attr_to_use_in_url'],
+                            model_config['exposed_attr'],
                     )
             ),
             methods=['POST']
     )
 
 
-def get_collection_params(collection_path, db_session, model_config, query_params):
+def get_collection_params(collection_path, db_session, model_config,
+                          query_params):
     return EndpointParams(
             rule=collection_path,
             endpoint=collection_path,
@@ -113,13 +134,6 @@ def get_collection_params(collection_path, db_session, model_config, query_param
     )
 
 
-def get_fk_name(graph, parent, child):
-    if child:
-        return graph[parent][child]['rel'].fk_attr_name
-    else:
-        return None
-
-
 def urls_for_path(path, config):
     url_parts = [''] + list(chain(
             *[[config[model]['url_name'], '<level_{}_id>'.format(i)]
@@ -129,10 +143,3 @@ def urls_for_path(path, config):
     collection_resource_url = '/'.join(url_parts[:-1])
     item_resource_url = '/'.join(url_parts)
     return collection_resource_url, item_resource_url
-
-
-def get_attr_name(graph, parent, child):
-    try:
-        return graph[parent][child]['rel'].fk_linked_attr_name
-    except KeyError:
-        return None

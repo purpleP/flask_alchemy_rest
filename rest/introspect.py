@@ -1,3 +1,5 @@
+from functools import partial
+
 from sqlalchemy.ext.associationproxy import AssociationProxy
 from sqlalchemy.orm import RelationshipProperty
 
@@ -34,7 +36,7 @@ def pk_attr_name(model):
     attrs_names = (attr_name for attr_name in dir(model)
                    if (not attr_name.startswith('__') and
                        not attr_name in RELATION_BLACKLIST))
-    return find(is_pk(model), attrs_names)
+    return find(partial(is_pk, model), attrs_names)
 
 
 def is_pk(model, attr_name):
