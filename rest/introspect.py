@@ -8,8 +8,10 @@ RELATION_BLACKLIST = ('query', 'query_class', '_sa_class_manager',
 
 
 def get_rels(model):
-    attrs_relations = ((attr_name, get_relation_class_for(model, attr_name)) for attr_name in dir(model))
-    return [(attr_name, relation_class) for attr_name, relation_class in attrs_relations if relation_class]
+    attrs_relations = ((attr_name, get_relation_class_for(model, attr_name)) for
+                       attr_name in dir(model))
+    return [(attr_name, relation_class) for attr_name, relation_class in
+            attrs_relations if relation_class]
 
 
 def get_relation_class_for(model, attr_name):
@@ -30,6 +32,19 @@ def get_related_association_proxy_model(attr):
         if hasattr(prop, attribute):
             return getattr(prop, attribute).class_
     return None
+
+
+def fk_attr_for(child_model, parent_model):
+    print('lala')
+    filter(dir(child_model))
+    pass
+
+def is_fk(model, attr):
+    cols = getattr(model, attr)._parentmapper._cols_by_table
+
+def is_fk_col(column):
+    return hasattr(column, 'foreign_keys')
+
 
 
 def pk_attr_name(model):
