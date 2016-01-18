@@ -17,6 +17,8 @@ def fk_query(db_session, model, linked_attr, item_filter, fk_filter=None):
         return item_filtered
 
 
+
+
 def create_queries(db_session, const_params, filter_values):
     if len(const_params) > len(filter_values):
         raise ValueError('There is too many constant query parameters'

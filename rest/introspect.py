@@ -1,52 +1,33 @@
 from functools import partial
 
+from sqlalchemy import inspect
 from sqlalchemy.ext.associationproxy import AssociationProxy
-from sqlalchemy.orm import RelationshipProperty
 
 RELATION_BLACKLIST = ('query', 'query_class', '_sa_class_manager',
                       '_decl_class_registry')
 
 
-def get_rels(model):
-    attrs_relations = ((attr_name, get_relation_class_for(model, attr_name)) for
-                       attr_name in dir(model))
-    return [(attr_name, relation_class) for attr_name, relation_class in
-            attrs_relations if relation_class]
+def related_models(model):
+    m = inspect(model)
+    relationships = [r.mapper.class_ for r in m.relationships.values()]
+    ds = [d for d in m.all_orm_descriptors.values()
+          if isinstance(d, AssociationProxy)]
+
+    return relationships + []
 
 
-def get_relation_class_for(model, attr_name):
-    if attr_name.startswith('__') or attr_name in RELATION_BLACKLIST:
-        return None
-    else:
-        attr = getattr(model, attr_name)
-        if hasattr(attr, 'property') \
-                and isinstance(attr.property, RelationshipProperty):
-            return attr.property.mapper.class_
-        if isinstance(attr, AssociationProxy):
-            return get_related_association_proxy_model(attr)
+def relation_info(child_model, parent_model):
+    ch_m = inspect(child_model)
+    p_m = inspect(parent_model)
+    result = [(attr, list(column.foreign_keys)[0])
+              for attr, column in ch_m.columns.items()
+              if list(column.foreign_keys)[0].table == p_m.table][0]
+    fk_attr, linked_column = result
+    linked_attr, _ = find(lambda i: i[1] == linked_column, p_m.columns.items())
+    return fk_attr, linked_attr
 
 
-def get_related_association_proxy_model(attr):
-    prop = attr.remote_attr.property
-    for attribute in ('mapper', 'parent'):
-        if hasattr(prop, attribute):
-            return getattr(prop, attribute).class_
-    return None
-
-
-def fk_attr_for(child_model, parent_model):
-    print('lala')
-    filter(dir(child_model))
-    pass
-
-def is_fk(model, attr):
-    cols = getattr(model, attr)._parentmapper._cols_by_table
-
-def is_fk_col(column):
-    return hasattr(column, 'foreign_keys')
-
-
-
+# TODO use inspect instead
 def pk_attr_name(model):
     attrs_names = (attr_name for attr_name in dir(model)
                    if (not attr_name.startswith('__') and

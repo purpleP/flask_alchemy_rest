@@ -1,6 +1,6 @@
 from pytest import fixture
 
-from sqlalchemy import Column, String, ForeignKey, create_engine
+from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
@@ -35,6 +35,31 @@ class Level2(ModelBase):
         return self.name == other.name and self.level1_pk == other.level1_pk
 
 
+association_table = Table('association', ModelBase.metadata,
+                          Column('parent_id', Integer,
+                                 ForeignKey('parents.id')),
+                          Column('child_id', Integer, ForeignKey('children.id'))
+                          )
+
+
+class Parent(ModelBase):
+    __tablename__ = 'parents'
+    id = Column(Integer, primary_key=True)
+    children = relationship(
+            "Child",
+            secondary=association_table,
+            back_populates="parents")
+
+
+class Child(ModelBase):
+    __tablename__ = 'children'
+    id = Column(Integer, primary_key=True)
+    parents = relationship(
+            "Parent",
+            secondary=association_table,
+            back_populates="children")
+
+
 class Level3(ModelBase):
     __tablename__ = 'level3s'
     name = Column(String, primary_key=True)
@@ -59,9 +84,9 @@ def items():
 @fixture(scope='module')
 def state():
     engine = create_engine(
-        'sqlite:///:memory:',
-        echo=False,
-        convert_unicode=True
+            'sqlite:///:memory:',
+            echo=False,
+            convert_unicode=True
     )
     _session = sessionmaker(autocommit=False,
                             autoflush=False,
