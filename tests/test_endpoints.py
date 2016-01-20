@@ -1,17 +1,11 @@
-import networkx as nx
 from flask import Flask
 from pytest import fixture
-from rest.endpoints import params_from_path, urls_for_path, default_config, \
+from rest.endpoints import urls_for_path, default_config, \
     register_handlers
-from rest.hierarchy_traverser import sublists
-from tests.fixtures import Root, Level1, Level2, Level3, params, state, \
-    level3_item_url
+from rest.hierarchy_traverser import inits
+from tests.fixtures import Root, Level1, Level2, Level3, state, \
+    level3_item_url, models_graphs
 
-g = nx.DiGraph()
-g.add_edge(Root, Root, fk_attr=None, linked_attr=None)
-g.add_edge(Root, Level1, linked_attr='name', fk_attr='root_pk')
-g.add_edge(Level1, Level2, linked_attr='name', fk_attr='level1_pk')
-g.add_edge(Level2, Level3, linked_attr='name', fk_attr='level2_pk')
 path = [Root, Level1, Level2, Level3]
 
 
@@ -20,22 +14,17 @@ def test_register_handlers(config):
     client = app.test_client()
     session, _ = state()
     register_handlers(
-            graph=g,
+            graph=models_graphs(),
             root=Root,
             config=config,
             db_session=session,
             app=app
     )
     urls_parts = level3_item_url.split('/')
-    urls = ['/'.join(sl) for sl in sublists(urls_parts)][1:]
+    urls = ['/'.join(sl) for sl in inits(urls_parts)][1:]
     for url in urls:
         response = client.get(url)
         assert response.status_code == 200
-
-
-def test_params_from_path(config):
-    p = params_from_path(g, path, config)
-    assert p == params()
 
 
 def test_default_config(config):

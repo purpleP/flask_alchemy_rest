@@ -7,10 +7,9 @@ from rest.handlers import schema_class_for_model, get_item, \
     serialize_item, \
     post_item, deserialize_item, get_collection, serialize_collection, \
     flask_post_wrapper
-from rest.query import QueryParams
-from tests.fixtures import Root, Level1, Level2, Level3, state, params, \
+from tests.fixtures import Level3, state, \
     level3_item_url, level3_collection_url, level3_item_rule, \
-    level3_collection_rule
+    level3_collection_rule, paths
 from tests.flask_test_helpers import get_json, post_json
 
 kwargs = {
@@ -19,12 +18,6 @@ kwargs = {
     'level_2_id': 'level2',
     'level_3_id': 'level3',
 }
-
-models = (Level3, Level2, Level1, Root)
-
-
-def params_as_namedtuple():
-    return [QueryParams(*p) for p in params()]
 
 
 def test_item_handler(client):
@@ -70,7 +63,7 @@ def client():
             view_func=partial(
                     get_item,
                     session,
-                    params_as_namedtuple(),
+                    paths()[-1],
                     partial(serialize_item, schema_class_for_model(Level3)())
             )
     )
@@ -80,7 +73,7 @@ def client():
             view_func=partial(
                     get_collection,
                     session,
-                    params_as_namedtuple(),
+                    paths()[-1],
                     partial(serialize_collection,
                             schema_class_for_model(Level3)())
             )
@@ -93,7 +86,8 @@ def client():
                     partial(
                             post_item,
                             session,
-                            params_as_namedtuple(),
+                            paths()[-1],
+                            'level3s',
                             partial(deserialize_item,
                                     schema_class_for_model(Level3)(), session)
                     )

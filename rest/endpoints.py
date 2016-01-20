@@ -30,6 +30,10 @@ class Config(object):
         return True
 
 
+def endpoint_params_for_path(param, config, db_session, graph):
+    pass
+
+
 def register_handlers(graph, root, config, db_session, app):
     params = [endpoint_params_for_path(list(p), config, db_session, graph)
               for p in all_paths(graph, root)]
@@ -60,30 +64,6 @@ def default_cfg_for_model(model, db_session=None):
         ),
         'exposed_attr': pk_attr_name(model)
     }
-
-
-def params_from_path(graph, path, config):
-    p = list(reversed(path)) + [path[0]]
-    return tuple((
-                child,
-                config[child]['exposed_attr'],
-                graph[parent][child]['fk_attr'],
-                graph[parent][child]['linked_attr']
-            )
-            for child, parent in zip(p, p[1:]))
-
-
-def endpoint_params_for_path(path, config, db_session, graph):
-    collection_path, item_path = urls_for_path(path, config)
-    query_params = params_from_path(graph, path, config)
-    model_cfg = config[path[-1]]
-    return (
-        get_collection_params(collection_path, db_session, model_cfg,
-                              query_params),
-        get_collection_item_params(item_path, db_session, model_cfg,
-                                   query_params),
-        post_item_params(collection_path, db_session, model_cfg, query_params),
-    )
 
 
 def get_collection_item_params(item_path, db_session, model_config,

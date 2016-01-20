@@ -1,22 +1,21 @@
 import json
-from functools import partial
 
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
-from rest.query import create_queries
+from rest.query import query
 from sqlalchemy.orm.exc import NoResultFound
 
 
-def get_collection(db_session, fixed_query_params, serializer, **kwargs):
-    args = [None] + [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    cq, _, _ = create_queries(db_session, fixed_query_params, args)
+def get_collection(db_session, path, serializer, **kwargs):
+    key_values = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
+    cq = query(db_session, path, key_values)
     items = cq.all()
     return jsonify({'items': serializer(items)})
 
 
-def get_item(db_session, fixed_query_params, serializer, **kwargs):
+def get_item(db_session, path, serializer, **kwargs):
     args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    _, item_query, _ = create_queries(db_session, fixed_query_params, args)
+    item_query = query(db_session, path, args)
     try:
         item = item_query.one()
         return jsonify(serializer(item))
@@ -31,20 +30,19 @@ def get_item(db_session, fixed_query_params, serializer, **kwargs):
 #     return do_stuff(cq, iq, fkq)
 
 
-def post_item(db_session, fixed_query_params,
+def post_item(db_session, path, rel_attr_name,
               deserializer, item_as_dict, **kwargs):
     args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    _, _, fkq, = create_queries(db_session, fixed_query_params[1:], args)
-    _, exposed_attr, fk_attr, linked_attr = fixed_query_params[0]
+    parent = query(db_session, path[1:], args).one()
+    _, exposed_attr = path[0]
     try:
         item = deserializer(item_as_dict)
+        db_session.add(parent)
+        getattr(parent, rel_attr_name).append(item)
+        db_session.commit()
+        return jsonify({'id': getattr(item, exposed_attr)})
     except SchemaError as e:
         return json.dumps(e.errors), 400
-    setattr(item, fixed_query_params[0].fk_attr,
-            fkq(linked_attr=linked_attr).one()[0])
-    db_session.add(item)
-    db_session.commit()
-    return jsonify({'id': getattr(item, exposed_attr)})
 
 
 class SchemaError(ValueError):

@@ -1,4 +1,6 @@
+import networkx as nx
 from pytest import fixture
+from rest.hierarchy_traverser import tails
 
 from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, Table
 from sqlalchemy.ext.declarative import declarative_base
@@ -103,24 +105,41 @@ def state():
     return _session, ([level3], [level2], [l1], [root])
 
 
-def filter_values():
-    filter_values = ['level3', 'level2', 'level1', 'root']
-    return filter_values
-
-
-def params():
-    params = (
-        (Level3, 'name', 'level2_pk', 'name'),
-        (Level2, 'name', 'level1_pk', 'name'),
-        (Level1, 'name', 'root_pk', 'name'),
-        (Root, 'name', None, None),
-    )
-    return params
-
-
 level3_item_url = '/roots/root/level1s/level1/level2s/level2/level3s/level3'
 level3_collection_url = '/roots/root/level1s/level1/level2s/level2/level3s'
 level3_item_rule = '/roots/<level_0_id>/level1s/<level_1_id>/level2s/' \
                    '<level_2_id>/level3s/<level_3_id>'
 level3_collection_rule = '/roots/<level_0_id>/level1s/<level_1_id>/level2s/' \
                          '<level_2_id>/level3s'
+config = {
+    Root: {
+        'exposed_attr': 'name',
+    },
+    Level1: {
+        'exposed_attr': 'name',
+    },
+    Level2: {
+        'exposed_attr': 'name',
+    },
+    Level3: {
+        'exposed_attr': 'name',
+    },
+}
+full_path = (Level3, Level2, Level1, Root)
+
+
+def paths():
+    pairs = [(m, config[m]['exposed_attr']) for m in full_path]
+    return list(reversed(tails(pairs)))[1:]
+
+
+@fixture(scope='module')
+def models_graphs():
+    hierarchy = nx.DiGraph()
+    hierarchy.add_edge(Root, Level1, rel_attr='level1s')
+    hierarchy.add_edge(Level1, Level2, rel_attr='level2s')
+    hierarchy.add_edge(Level2, Level3, rel_attr='level3s')
+    cyclic = nx.DiGraph()
+    cyclic.add_edge(Parent, Child, rel_attr='children')
+    cyclic.add_edge(Child,Parent, rel_attr='parents')
+    return hierarchy, cyclic
