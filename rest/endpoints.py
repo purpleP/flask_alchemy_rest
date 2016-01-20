@@ -6,7 +6,7 @@ from rest.handlers import get_item, flask_post_wrapper, post_item, \
     get_collection, \
     serialize_item, serialize_collection, deserialize_item, \
     schema_class_for_model
-from rest.hierarchy_traverser import all_paths
+from rest.hierarchy_traverser import all_paths, create_graph, inits
 from rest.introspect import pk_attr_name
 
 EndpointParams = namedtuple('EndpointParams',
@@ -30,12 +30,63 @@ class Config(object):
         return True
 
 
-def endpoint_params_for_path(param, config, db_session, graph):
-    pass
+def endpoint_params_for_path(path, config, db_session, graph):
+    col_rule, item_rule = url_rules_for_path(path, config)
+    ps = reversed_paths(config, path)
+    model_config = config[path[0]]
+    get_collection_params = EndpointParams(
+            rule=col_rule,
+            endpoint=col_rule + 'GET',
+            view_func=partial(
+                    get_collection,
+                    db_session,
+                    ps,
+                    model_config['collection_serializer']
+            ),
+            methods=['GET']
+    )
+    get_item_params = EndpointParams(
+            rule=item_rule,
+            endpoint=item_rule + 'GET',
+            view_func=partial(
+                    get_item,
+                    db_session,
+                    ps,
+                    model_config['item_serializer']
+            ),
+            methods=['GET']
+    )
+    # TODO make all nodes in graph to have identity arrow instead
+    if len(path) == 1:
+        rel_attr = None
+    else:
+        rel_attr = graph[path[-2]][path[-1]]['rel_attr']
+
+    post_item_params = EndpointParams(
+            rule=col_rule,
+            endpoint=col_rule + 'POST',
+            view_func=partial(
+                    flask_post_wrapper,
+                    partial(
+                            post_item,
+                            db_session,
+                            ps,
+                            rel_attr,
+                            model_config['item_deserializer']
+                    )
+            ),
+            methods=['POST']
+    )
+    return get_collection_params, get_item_params, post_item_params
+
+
+def reversed_paths(path, config):
+    return [(subpath, config[subpath[0]]['exposed_attr']) for subpath in
+            inits(path[::-1])[1:]]
 
 
 def register_handlers(graph, root, config, db_session, app):
-    params = [endpoint_params_for_path(list(p), config, db_session, graph)
+    params = [endpoint_params_for_path(p, config, db_session, graph)
               for p in all_paths(graph, root)]
     [register_handler(app, endpoint_param) for endpoint_param in params]
 
@@ -51,6 +102,17 @@ def default_config(models, db_session=None):
     return {m: default_cfg_for_model(m, db_session) for m in models}
 
 
+def create_default_api(root_model, db_session, app):
+    graph, default_conf = defaults_for_root(root_model, db_session)
+    register_handlers(graph, root_model, default_conf, db_session, app)
+
+
+def defaults_for_root(root_model, db_session):
+    graph = create_graph(root_model)
+    default_conf = default_config(graph.nodes(), db_session)
+    return graph, default_conf
+
+
 def default_cfg_for_model(model, db_session=None):
     schema = schema_class_for_model(model)()
     return {
@@ -59,64 +121,18 @@ def default_cfg_for_model(model, db_session=None):
         'collection_serializer': partial(serialize_collection, schema),
         'item_deserializer': partial(
                 deserialize_item,
-                schema_class_for_model(model),
+                schema,
                 db_session
         ),
-        'exposed_attr': pk_attr_name(model)
+        'exposed_attr': pk_attr_name(model)[0],
+        'exposed_attr_type': 'int:' if pk_attr_name(model)[1] == int else ''
     }
 
 
-def get_collection_item_params(item_path, db_session, model_config,
-                               query_params):
-    return EndpointParams(
-            rule=item_path,
-            endpoint=item_path,
-            view_func=partial(
-                    get_item,
-                    db_session,
-                    query_params,
-                    model_config['item_serializer']
-            ),
-            methods=['GET']
-    )
-
-
-def post_item_params(collection_path, db_session, model_config, query_params):
-    return EndpointParams(
-            rule=collection_path,
-            endpoint=collection_path + 'post',
-            view_func=partial(
-                    flask_post_wrapper,
-                    partial(
-                            post_item,
-                            db_session,
-                            query_params,
-                            model_config['item_deserializer'],
-                            model_config['exposed_attr'],
-                    )
-            ),
-            methods=['POST']
-    )
-
-
-def get_collection_params(collection_path, db_session, model_config,
-                          query_params):
-    return EndpointParams(
-            rule=collection_path,
-            endpoint=collection_path,
-            view_func=partial(
-                    get_collection,
-                    db_session,
-                    query_params,
-                    model_config['collection_serializer']
-            ),
-            methods=['GET']
-    )
-
-
-def urls_for_path(path, config):
+def url_rules_for_path(path, config):
     url_parts = [''] + list(chain(
-            *[[config[model]['url_name'], '<level_{}_id>'.format(i)]
+            *[[config[model]['url_name'],
+               '<{}level_{}_id>'.format(config[model]['exposed_attr_type'], i)]
               for i, model in enumerate(path)]
     )
     )

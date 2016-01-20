@@ -9,7 +9,8 @@ def related_models(model):
 def pk_attr_name(model):
     attrs = [(attr, col_prop) for attr, col_prop in
              inspect(model).column_attrs.items()]
-    return find(is_pk, attrs)[0]
+    attr, column_prop = find(is_pk, attrs)
+    return attr, column_prop.columns[0].type.python_type
 
 
 def is_pk(attr_column):

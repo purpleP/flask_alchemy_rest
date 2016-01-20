@@ -3,7 +3,8 @@ from tests.fixtures import Root, Level1, Child, Parent
 
 
 def test_pk_name_for_model():
-    assert 'name' == pk_attr_name(Root)
+    assert ('name', str) == pk_attr_name(Root)
+    assert ('id', int) == pk_attr_name(Child)
 
 
 def test_related_models():

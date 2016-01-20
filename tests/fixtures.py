@@ -47,6 +47,7 @@ association_table = Table('association', ModelBase.metadata,
 class Parent(ModelBase):
     __tablename__ = 'parents'
     id = Column(Integer, primary_key=True)
+    name = Column(String)
     children = relationship(
             "Child",
             secondary=association_table,
@@ -56,6 +57,7 @@ class Parent(ModelBase):
 class Child(ModelBase):
     __tablename__ = 'children'
     id = Column(Integer, primary_key=True)
+    name = Column(String)
     parents = relationship(
             "Parent",
             secondary=association_table,

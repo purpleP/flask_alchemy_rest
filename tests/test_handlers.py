@@ -9,7 +9,7 @@ from rest.handlers import schema_class_for_model, get_item, \
     flask_post_wrapper
 from tests.fixtures import Level3, state, \
     level3_item_url, level3_collection_url, level3_item_rule, \
-    level3_collection_rule, paths
+    level3_collection_rule, paths, Root
 from tests.flask_test_helpers import get_json, post_json
 
 kwargs = {
@@ -45,6 +45,11 @@ def test_post_handler(client):
     id_ = json.loads(response.data)['id']
     assert id_ == 'bar'
     assert new_data == get_json(client, level3_collection_url + '/' + id_)
+    response = post_json(client, '/roots', new_data)
+    assert response.status_code == 200
+    assert id_ == 'bar'
+    new_data['level1s'] = []
+    assert new_data == get_json(client, '/roots/bar')
     response = post_json(client, level3_collection_url, wrong_data)
     assert response.status_code == 400
     errors_data = json.loads(response.data)
@@ -57,6 +62,32 @@ def client():
     app = create_app()
     session, data = state()
     app.debug = True
+    app.add_url_rule(
+        rule='/roots/<level_0_id>',
+        endpoint='/roots_item_get',
+        view_func=partial(
+            get_item,
+            session,
+            paths()[0],
+            partial(serialize_item, schema_class_for_model(Root)())
+        )
+    )
+    app.add_url_rule(
+        rule='/roots',
+        endpoint='/roots_post',
+        view_func=partial(
+                flask_post_wrapper,
+                partial(
+                        post_item,
+                        session,
+                        paths()[0],
+                        None,
+                        partial(deserialize_item,
+                                schema_class_for_model(Root)(), session)
+                )
+        ),
+        methods=['POST']
+    )
     app.add_url_rule(
             rule=level3_item_rule,
             endpoint='1',
