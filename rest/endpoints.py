@@ -6,7 +6,7 @@ from rest.handlers import get_item, flask_post_wrapper, post_item, \
     get_collection, \
     serialize_item, serialize_collection, deserialize_item, \
     schema_class_for_model
-from rest.hierarchy_traverser import all_paths, create_graph, inits
+from rest.hierarchy_traverser import all_paths, create_graph, inits, tails
 from rest.introspect import pk_attr_name
 
 EndpointParams = namedtuple('EndpointParams',
@@ -81,8 +81,7 @@ def endpoint_params_for_path(path, config, db_session, graph):
 
 
 def reversed_paths(path, config):
-    return [(subpath, config[subpath[0]]['exposed_attr']) for subpath in
-            inits(path[::-1])[1:]]
+    return [(m, config[m]['exposed_attr']) for m in reversed(path)]
 
 
 def register_handlers(graph, root, config, db_session, app):

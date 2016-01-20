@@ -36,8 +36,8 @@ def test_default_config(config):
 def test_reversed_paths():
     path = [Parent, Child]
     correct_output = [
-        ([Parent], 'id'),
-        ([Child, Parent], 'id'),
+        (Child, 'id'),
+        (Parent, 'id'),
     ]
     config = {
         Parent: {
@@ -47,7 +47,6 @@ def test_reversed_paths():
             'exposed_attr': 'id',
         },
     }
-    #FIXME
     assert correct_output == reversed_paths(path, config)
 
 

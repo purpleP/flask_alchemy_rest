@@ -2,7 +2,8 @@ import networkx as nx
 from pytest import fixture
 from rest.hierarchy_traverser import tails
 
-from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, Table
+from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, \
+     Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
@@ -37,11 +38,12 @@ class Level2(ModelBase):
         return self.name == other.name and self.level1_pk == other.level1_pk
 
 
-association_table = Table('association', ModelBase.metadata,
-                          Column('parent_id', Integer,
-                                 ForeignKey('parents.id')),
-                          Column('child_id', Integer, ForeignKey('children.id'))
-                          )
+association_table = Table(
+    'association',
+    ModelBase.metadata,
+    Column('parent_id', Integer, ForeignKey('parents.id')),
+    Column('child_id', Integer, ForeignKey('children.id'))
+)
 
 
 class Parent(ModelBase):
@@ -86,17 +88,20 @@ def items():
 
 
 @fixture(scope='module')
-def state():
+def session():
     engine = create_engine(
             'sqlite:///:memory:',
             echo=False,
             convert_unicode=True
     )
-    _session = sessionmaker(autocommit=False,
-                            autoflush=False,
-                            bind=engine)()
+    session = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
     ModelBase.metadata.create_all(engine)
+    return session
 
+
+@fixture(scope='module')
+def state():
+    _session = session()
     root = Root(name='root')
     l1 = Level1(name='level1')
     level2, level3 = items()
@@ -143,5 +148,5 @@ def models_graphs():
     hierarchy.add_edge(Level2, Level3, rel_attr='level3s')
     cyclic = nx.DiGraph()
     cyclic.add_edge(Parent, Child, rel_attr='children')
-    cyclic.add_edge(Child,Parent, rel_attr='parents')
+    cyclic.add_edge(Child, Parent, rel_attr='parents')
     return hierarchy, cyclic
