@@ -13,7 +13,7 @@ def test_register_handlers(config):
     app = Flask(__name__)
     client = app.test_client()
     hierarchy, _ = models_graphs()
-    session, _ = state()
+    session = session()
     register_handlers(
             graph=hierarchy,
             root=Root,
