@@ -112,6 +112,22 @@ def state():
     return _session, ([level3], [level2], [l1], [root])
 
 
+def hierarchy_data():
+    root = Root(name='root')
+    l1 = Level1(name='level1')
+    l2 = Level2(name=u'level2')
+    l3 = Level3(name=u'level3')
+    return [root], [l1], [l2], [l3]
+
+
+def cycled_data():
+    adam = Parent(name='Adam')
+    eve = Parent(name='Eve')
+    cain = Child(name='Cain')
+    abel = Child(name='Abel')
+    return adam, eve, cain, abel
+
+
 level3_item_url = '/roots/root/level1s/level1/level2s/level2/level3s/level3'
 level3_collection_url = '/roots/root/level1s/level1/level2s/level2/level3s'
 level3_item_rule = '/roots/<level_0_id>/level1s/<level_1_id>/level2s/' \

@@ -5,8 +5,9 @@ from itertools import chain
 from rest.handlers import get_item, flask_post_wrapper, post_item, \
     get_collection, \
     serialize_item, serialize_collection, deserialize_item, \
-    schema_class_for_model
-from rest.hierarchy_traverser import all_paths, create_graph, inits, tails
+    schema_class_for_model, post_item_many_to_many, delete_item
+from rest.hierarchy_traverser import all_paths, create_graph, inits, tails, \
+    cycle_free_graphs
 from rest.introspect import pk_attr_name
 
 EndpointParams = namedtuple('EndpointParams',
@@ -32,8 +33,8 @@ class Config(object):
 
 def endpoint_params_for_path(path, config, db_session, graph):
     col_rule, item_rule = url_rules_for_path(path, config)
-    ps = reversed_paths(config, path)
-    model_config = config[path[0]]
+    ps = reversed_paths(path, config)
+    model_config = config[path[-1]]
     get_collection_params = EndpointParams(
             rule=col_rule,
             endpoint=col_rule + 'GET',
@@ -56,28 +57,69 @@ def endpoint_params_for_path(path, config, db_session, graph):
             ),
             methods=['GET']
     )
+    delete_item_params = EndpointParams(
+            rule=item_rule,
+            endpoint=item_rule + 'DELETE',
+            view_func=partial(
+                    delete_item,
+                    db_session,
+                    ps
+            ),
+            methods=['DELETE']
+    )
     # TODO make all nodes in graph to have identity arrow instead
     if len(path) == 1:
         rel_attr = None
+        post_item_params = EndpointParams(
+                rule=col_rule,
+                endpoint=col_rule + 'POST',
+                view_func=partial(
+                        flask_post_wrapper,
+                        partial(
+                                post_item,
+                                db_session,
+                                ps,
+                                rel_attr,
+                                model_config['item_deserializer']
+                        )
+                ),
+                methods=['POST']
+        )
     else:
         rel_attr = graph[path[-2]][path[-1]]['rel_attr']
-
-    post_item_params = EndpointParams(
-            rule=col_rule,
-            endpoint=col_rule + 'POST',
-            view_func=partial(
-                    flask_post_wrapper,
-                    partial(
-                            post_item,
-                            db_session,
-                            ps,
-                            rel_attr,
-                            model_config['item_deserializer']
-                    )
-            ),
-            methods=['POST']
-    )
-    return get_collection_params, get_item_params, post_item_params
+        if (path[-1], path[-2]) in graph.edges():
+            post_item_params = EndpointParams(
+                    rule=col_rule,
+                    endpoint=col_rule + 'POST',
+                    view_func=partial(
+                            flask_post_wrapper,
+                            partial(
+                                    post_item_many_to_many,
+                                    db_session,
+                                    ps,
+                                    rel_attr
+                            )
+                    ),
+                    methods=['POST']
+            )
+        else:
+            post_item_params = EndpointParams(
+                    rule=col_rule,
+                    endpoint=col_rule + 'POST',
+                    view_func=partial(
+                            flask_post_wrapper,
+                            partial(
+                                    post_item,
+                                    db_session,
+                                    ps,
+                                    rel_attr,
+                                    model_config['item_deserializer']
+                            )
+                    ),
+                    methods=['POST']
+            )
+    return get_collection_params, get_item_params, \
+           post_item_params, delete_item_params
 
 
 def reversed_paths(path, config):
@@ -87,6 +129,7 @@ def reversed_paths(path, config):
 def register_handlers(graph, root, config, db_session, app):
     params = [endpoint_params_for_path(p, config, db_session, graph)
               for p in all_paths(graph, root)]
+
     [register_handler(app, endpoint_param) for endpoint_param in params]
 
 

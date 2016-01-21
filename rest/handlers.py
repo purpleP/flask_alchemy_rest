@@ -40,13 +40,30 @@ def post_item(db_session, path, rel_attr_name,
             db_session.add(item)
         else:
             parent = query(db_session, path[1:], args).one()
-            db_session.add(item)
             db_session.add(parent)
             getattr(parent, rel_attr_name).append(item)
         db_session.commit()
         return jsonify({'id': getattr(item, exposed_attr)})
     except SchemaError as e:
         return json.dumps(e.errors), 400
+
+
+def post_item_many_to_many(db_session, path, rel_attr_name, dict_, **kwargs):
+    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
+    _id = dict_['id']
+    model, exposed_attr = path[0]
+    item = db_session.query(model).filter(getattr(model, exposed_attr) == _id).one()
+    parent = query(db_session, path[1:], args).one()
+    db_session.add(parent)
+    getattr(parent, rel_attr_name).append(item)
+    db_session.commit()
+    return '', 200
+
+
+def delete_item(db_session, path, **kwargs):
+    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
+    query(db_session, path, args).delete(synchronize_session=False)
+    return '', 200
 
 
 class SchemaError(ValueError):
