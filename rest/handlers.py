@@ -23,11 +23,9 @@ def get_item(db_session, path, serializer, **kwargs):
         return 'No such resource', 404
 
 
-# TODO Think about how to remove code duplication in functional style
-# def handle(db_session, query_params, do_stuff, **kwargs):
-#     args = [kwargs[key] for key in sorted(kwargs.keys())]
-#     cq, iq, fkq = create_queries(db_session, query_params, **kwargs)
-#     return do_stuff(cq, iq, fkq)
+def handler_wrapper(wrapped_handler, **kwargs):
+    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
+    wrapped_handler(*args)
 
 
 def post_item(db_session, path, rel_attr_name,
@@ -62,7 +60,8 @@ def post_item_many_to_many(db_session, path, rel_attr_name, dict_, **kwargs):
 
 def delete_item(db_session, path, **kwargs):
     args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    query(db_session, path, args).delete(synchronize_session=False)
+    db_session.delete(query(db_session, path, args).one())
+    db_session.commit()
     return '', 200
 
 

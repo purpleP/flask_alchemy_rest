@@ -61,6 +61,11 @@ def check_endpoints(client, url, all_data_to_upload, config, graph, start_node):
     new_url = check_endpoint(client, url, item_as_dict)
     for s in graph.successors_iter(start_node):
         check_endpoints(client, new_url, all_data_to_upload, config, graph, s)
+    response = client.delete(new_url)
+    assert response.status_code == 200
+    data = get_json(client, url)
+    assert len(data['items']) == 0
+
 
 
 def check_endpoint(client, collection_url, item_as_dict):
@@ -82,10 +87,6 @@ def check_endpoint(client, collection_url, item_as_dict):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data == item_as_dict
-    response = client.delete(item_url)
-    assert response.status_code == 200
-    data = get_json(client, collection_url)
-    assert len(data['items']) == 0
     return item_url
 
 

@@ -50,7 +50,7 @@ def test_post_handler(client):
     assert id_ == 'bar'
     response = client.delete(level3_collection_url + '/' + id_)
     assert response.status_code == 200
-    assert get_json(client, level3_collection_url)['items'] == []
+    assert get_json(client, level3_collection_url)['items'] == [{'name': 'level3'}]
     new_data['level1s'] = []
     assert new_data == get_json(client, '/roots/bar')
     response = post_json(client, level3_collection_url, wrong_data)
