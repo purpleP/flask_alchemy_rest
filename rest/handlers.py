@@ -1,21 +1,21 @@
 import json
 
+from functools import partial
+
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
 from rest.query import query
 from sqlalchemy.orm.exc import NoResultFound
 
 
-def get_collection(db_session, path, serializer, **kwargs):
-    key_values = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    cq = query(db_session, path, key_values)
+def get_collection(db_session, path, serializer, *keys):
+    cq = query(db_session, path, keys)
     items = cq.all()
     return jsonify({'items': serializer(items)})
 
 
-def get_item(db_session, path, serializer, **kwargs):
-    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    item_query = query(db_session, path, args)
+def get_item(db_session, path, serializer, *keys):
+    item_query = query(db_session, path, keys)
     try:
         item = item_query.one()
         return jsonify(serializer(item))
@@ -23,21 +23,33 @@ def get_item(db_session, path, serializer, **kwargs):
         return 'No such resource', 404
 
 
-def handler_wrapper(wrapped_handler, **kwargs):
-    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    wrapped_handler(*args)
+def keys_from_kwargs(**kwargs):
+    return tuple((kwargs[key] for key in sorted(kwargs.keys(), reverse=True)))
+
+
+def create_handler(handler):
+    def f(**kwargs):
+        keys = keys_from_kwargs(**kwargs)
+        return handler(*keys)
+    return f
+
+
+def post_handler(handler):
+    def f(**kwargs):
+        return create_handler(partial(handler, data=request.json))(**kwargs)
+    return f
 
 
 def post_item(db_session, path, rel_attr_name,
-              deserializer, item_as_dict, **kwargs):
-    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
+              deserializer, *keys, **kwargs):
     _, exposed_attr = path[0]
+    data = kwargs.pop('data')
     try:
-        item = deserializer(item_as_dict)
+        item = deserializer(data)
         if len(path) == 1:
             db_session.add(item)
         else:
-            parent = query(db_session, path[1:], args).one()
+            parent = query(db_session, path[1:], keys).one()
             db_session.add(parent)
             getattr(parent, rel_attr_name).append(item)
         db_session.commit()
@@ -46,21 +58,19 @@ def post_item(db_session, path, rel_attr_name,
         return json.dumps(e.errors), 400
 
 
-def post_item_many_to_many(db_session, path, rel_attr_name, dict_, **kwargs):
-    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    _id = dict_['id']
+def post_item_many_to_many(db_session, path, rel_attr_name, *keys, **kwargs):
+    _id = kwargs.pop('data')['id']
     model, exposed_attr = path[0]
     item = db_session.query(model).filter(getattr(model, exposed_attr) == _id).one()
-    parent = query(db_session, path[1:], args).one()
+    parent = query(db_session, path[1:], keys).one()
     db_session.add(parent)
     getattr(parent, rel_attr_name).append(item)
     db_session.commit()
     return '', 200
 
 
-def delete_item(db_session, path, **kwargs):
-    args = [kwargs[key] for key in sorted(kwargs.keys(), reverse=True)]
-    db_session.delete(query(db_session, path, args).one())
+def delete_item(db_session, path, *keys):
+    db_session.delete(query(db_session, path, keys).one())
     db_session.commit()
     return '', 200
 
@@ -96,7 +106,3 @@ def schema_class_for_model(model_class):
             (ModelSchema,),
             {'Meta': schema_meta}
     )
-
-
-def flask_post_wrapper(actual_poster, **kwargs):
-    return actual_poster(request.json, **kwargs)

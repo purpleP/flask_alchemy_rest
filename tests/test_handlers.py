@@ -6,7 +6,7 @@ from pytest import fixture
 from rest.handlers import schema_class_for_model, get_item, \
     serialize_item, \
     post_item, deserialize_item, get_collection, serialize_collection, \
-    flask_post_wrapper, post_item_many_to_many, delete_item
+    post_item_many_to_many, delete_item, create_handler, post_handler
 from tests.fixtures import Level3, state, \
     level3_item_url, level3_collection_url, level3_item_rule, \
     level3_collection_rule, paths, Root, Child, Parent, cycled_data
@@ -50,7 +50,8 @@ def test_post_handler(client):
     assert id_ == 'bar'
     response = client.delete(level3_collection_url + '/' + id_)
     assert response.status_code == 200
-    assert get_json(client, level3_collection_url)['items'] == [{'name': 'level3'}]
+    assert get_json(client, level3_collection_url)['items'] == [
+        {'name': 'level3'}]
     new_data['level1s'] = []
     assert new_data == get_json(client, '/roots/bar')
     response = post_json(client, level3_collection_url, wrong_data)
@@ -64,7 +65,8 @@ def test_post_many_to_many(client_session):
     c, s = client_session
     adam_id = s.query(Parent.id).filter_by(name='Adam').one().id
     cain_id = s.query(Child.id).filter_by(name='Cain').one().id
-    response = post_json(c, '/parents/' + str(adam_id) + '/' + 'children', {'id': cain_id})
+    response = post_json(c, '/parents/' + str(adam_id) + '/' + 'children',
+                         {'id': cain_id})
     assert response.status_code == 200
     adam = s.query(Parent).filter_by(name='Adam').one()
     assert len(adam.children) == 1
@@ -87,100 +89,110 @@ def client_session():
     session.commit()
 
     app.add_url_rule(
-            rule='/parents/<level_0_id>',
-            endpoint='/parents_GET',
-            view_func=partial(
-                    get_item,
-                    session,
-                    cycled_paths[0],
-                    partial(serialize_item, schema_class_for_model(Parent)())
-            ),
-            methods=['GET']
-    )
-    app.add_url_rule(
-            rule='/parents/<level_0_id>/children',
-            endpoint='/parents_post',
-            view_func=partial(
-                    flask_post_wrapper,
-                    partial(
-                            post_item_many_to_many,
-                            session,
-                            cycled_paths[1],
-                            'children'
-                    )
-            ),
-            methods=['POST']
-    )
-    app.add_url_rule(
-            rule='/roots/<level_0_id>',
-            endpoint='/roots_item_get',
-            view_func=partial(
-                    get_item,
-                    session,
-                    paths()[0],
-                    partial(serialize_item, schema_class_for_model(Root)())
+        rule='/parents/<level_0_id>',
+        endpoint='/parents_GET',
+        view_func=create_handler(
+            partial(
+                get_item,
+                session,
+                cycled_paths[0],
+                partial(serialize_item, schema_class_for_model(Parent)())
             )
+        ),
+        methods=['GET']
     )
     app.add_url_rule(
-            rule='/roots',
-            endpoint='/roots_post',
-            view_func=partial(
-                    flask_post_wrapper,
-                    partial(
-                            post_item,
-                            session,
-                            paths()[0],
-                            None,
-                            partial(deserialize_item,
-                                    schema_class_for_model(Root)(), session)
-                    )
-            ),
-            methods=['POST']
-    )
-    app.add_url_rule(
-            rule=level3_item_rule,
-            endpoint='1',
-            view_func=partial(
-                    get_item,
-                    session,
-                    paths()[-1],
-                    partial(serialize_item, schema_class_for_model(Level3)())
+        rule='/parents/<level_0_id>/children',
+        endpoint='/parents_post',
+        view_func=post_handler(
+            partial(
+                post_item_many_to_many,
+                session,
+                cycled_paths[1],
+                'children'
             )
+        ),
+        methods=['POST']
     )
     app.add_url_rule(
-            rule=level3_collection_rule,
-            endpoint='2',
-            view_func=partial(
-                    get_collection,
-                    session,
-                    paths()[-1],
-                    partial(serialize_collection,
-                            schema_class_for_model(Level3)())
+        rule='/roots/<level_0_id>',
+        endpoint='/roots_item_get',
+        view_func=create_handler(
+            partial(
+                get_item,
+                session,
+                paths()[0],
+                partial(serialize_item, schema_class_for_model(Root)())
             )
+        )
     )
     app.add_url_rule(
-            rule=level3_collection_rule,
-            endpoint='3',
-            view_func=partial(
-                    flask_post_wrapper,
-                    partial(
-                            post_item,
-                            session,
-                            paths()[-1],
-                            'level3s',
-                            partial(deserialize_item,
-                                    schema_class_for_model(Level3)(), session)
-                    )
-            ),
-            methods=['POST']
+        rule='/roots',
+        endpoint='/roots_post',
+        view_func=post_handler(
+            partial(
+                post_item,
+                session,
+                paths()[0],
+                None,
+                partial(deserialize_item, schema_class_for_model(Root)(), session)
+            )
+        ),
+        methods=['POST']
+    )
+    app.add_url_rule(
+        rule=level3_item_rule,
+        endpoint='1',
+        view_func=create_handler(
+            partial(
+                get_item,
+                session,
+                paths()[-1],
+                partial(serialize_item, schema_class_for_model(Level3)())
+            )
+        ),
+        methods=['GET']
+    )
+    app.add_url_rule(
+        rule=level3_collection_rule,
+        endpoint='2',
+        view_func=create_handler(
+            partial(
+                get_collection,
+                session,
+                paths()[-1],
+                partial(serialize_collection, schema_class_for_model(Level3)())
+            )
+        ),
+        methods=['GET']
+    )
+    app.add_url_rule(
+        rule=level3_collection_rule,
+        endpoint='3',
+        view_func=post_handler(
+            partial(
+                post_item,
+                session,
+                paths()[-1],
+                'level3s',
+                partial(
+                    deserialize_item,
+                    schema_class_for_model(Level3)(),
+                    session
+                )
+            )
+        ),
+        methods=['POST']
     )
     app.add_url_rule(
         rule=level3_item_rule,
         endpoint='4',
-        view_func=partial(
-            delete_item,
-            session,
-            paths()[-1],
+        view_func=create_handler(
+            partial(
+                delete_item,
+                session,
+                paths()[-1],
+            )
         ),
         methods=['DELETE']
     )
@@ -192,6 +204,7 @@ def client_session():
 def client():
     c, s = client_session()
     return c
+
 
 def create_app():
     return Flask(__name__)
