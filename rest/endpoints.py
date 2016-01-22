@@ -2,12 +2,12 @@ from collections import namedtuple
 from functools import partial
 from itertools import chain
 
-from rest.handlers import get_item, flask_post_wrapper, post_item, \
+from rest.handlers import get_item, post_item, \
     get_collection, \
     serialize_item, serialize_collection, deserialize_item, \
-    schema_class_for_model, post_item_many_to_many, delete_item
-from rest.hierarchy_traverser import all_paths, create_graph, inits, tails, \
-    cycle_free_graphs
+    schema_class_for_model, post_item_many_to_many, delete_item, create_handler, \
+    post_handler
+from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
 
 EndpointParams = namedtuple('EndpointParams',
@@ -38,32 +38,38 @@ def endpoint_params_for_path(path, config, db_session, graph):
     get_collection_params = EndpointParams(
             rule=col_rule,
             endpoint=col_rule + 'GET',
-            view_func=partial(
+            view_func=create_handler(
+                partial(
                     get_collection,
                     db_session,
                     ps,
                     model_config['collection_serializer']
+                )
             ),
             methods=['GET']
     )
     get_item_params = EndpointParams(
             rule=item_rule,
             endpoint=item_rule + 'GET',
-            view_func=partial(
+            view_func=create_handler(
+                partial(
                     get_item,
                     db_session,
                     ps,
                     model_config['item_serializer']
+                )
             ),
             methods=['GET']
     )
     delete_item_params = EndpointParams(
             rule=item_rule,
             endpoint=item_rule + 'DELETE',
-            view_func=partial(
+            view_func=create_handler(
+                partial(
                     delete_item,
                     db_session,
                     ps
+                )
             ),
             methods=['DELETE']
     )
@@ -73,15 +79,14 @@ def endpoint_params_for_path(path, config, db_session, graph):
         post_item_params = EndpointParams(
                 rule=col_rule,
                 endpoint=col_rule + 'POST',
-                view_func=partial(
-                        flask_post_wrapper,
-                        partial(
-                                post_item,
-                                db_session,
-                                ps,
-                                rel_attr,
-                                model_config['item_deserializer']
-                        )
+                view_func=post_handler(
+                    partial(
+                        post_item,
+                        db_session,
+                        ps,
+                        rel_attr,
+                        model_config['item_deserializer']
+                    )
                 ),
                 methods=['POST']
         )
@@ -91,8 +96,7 @@ def endpoint_params_for_path(path, config, db_session, graph):
             post_item_params = EndpointParams(
                     rule=col_rule,
                     endpoint=col_rule + 'POST',
-                    view_func=partial(
-                            flask_post_wrapper,
+                    view_func=post_handler(
                             partial(
                                     post_item_many_to_many,
                                     db_session,
@@ -106,8 +110,7 @@ def endpoint_params_for_path(path, config, db_session, graph):
             post_item_params = EndpointParams(
                     rule=col_rule,
                     endpoint=col_rule + 'POST',
-                    view_func=partial(
-                            flask_post_wrapper,
+                    view_func=post_handler(
                             partial(
                                     post_item,
                                     db_session,

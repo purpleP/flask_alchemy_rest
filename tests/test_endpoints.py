@@ -50,6 +50,11 @@ def test_register_handlers(state):
     children = json.loads(response.data)['children']
     assert len(children) == 1
     assert children[0] == cain_id
+    response = client.get('/'.join(('/children', str(cain_id))))
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['parents'] == [adam_id, eve_id]
+
 
 
 def check_endpoints(client, url, all_data_to_upload, config, graph, start_node):
