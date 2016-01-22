@@ -7,7 +7,7 @@ from rest.handlers import get_item, post_item, \
     serialize_item, serialize_collection, deserialize_item, \
     schema_class_for_model, post_item_many_to_many, delete_item, \
     create_handler, \
-    post_handler
+    post_handler, get_handler
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
 
@@ -42,11 +42,11 @@ def endpoints_params(endpoints):
             )
     )
     return [EndpointParams(
-            rule=rh[0],
-            endpoint=rh[0] + method,
-            view_func=rh[1],
-            methods=[method]
-    )
+                rule=rh[0],
+                endpoint=rh[0] + method,
+                view_func=rh[1],
+                methods=[method]
+            )
             for method, rh in es]
 
 
@@ -57,7 +57,7 @@ def endpoints_for_path(path, config, db_session, graph):
     model_config = config[model]
     endpoints = defaultdict(dict)
     endpoints['collection']['GET'] = (
-        col_rule, create_handler(
+        col_rule, get_handler(
                 partial(
                         get_collection,
                         db_session,

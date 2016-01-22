@@ -1,3 +1,4 @@
+from functools import partial
 from operator import eq
 
 from networkx.algorithms.isomorphism.isomorph import is_isomorphic
@@ -7,6 +8,7 @@ import networkx as nx
 
 from rest.hierarchy_traverser import full_paths, inits, tails, create_graph, \
     cycle_free_graphs, all_paths
+from rest.introspect import find
 from tests.fixtures import Root, models_graphs, Parent, Child
 
 
@@ -43,15 +45,21 @@ def test_create_hierarchy(models_graphs):
 def test_cycle_free_graphs(models_graphs):
     hierarchy, cyclic_graph = models_graphs
     cf1 = cyclic_graph.copy()
-    del cf1[Child][Parent]
+    cf1.remove_edge(Child, Parent)
     cf2 = cyclic_graph.copy()
-    del cf2[Parent][Child]
+    cf2.remove_edge(Parent, Child)
     cf_graphs = cycle_free_graphs(cyclic_graph)
-    for cf, correct_cf in zip(cf_graphs, (cf1, cf2)):
-        assert is_isomorphic(cf, correct_cf, node_match=eq, edge_match=eq)
+    correct_graphs = [cf1, cf2]
+
+    for cf in cf_graphs:
+        check = partial(is_isomorphic, cf, node_match=eq, edge_match=eq)
+        isom = find(check, correct_graphs)
+        assert isom is not None
+        correct_graphs.remove(isom)
+
     cf_graphs = cycle_free_graphs(hierarchy)
     assert len(cf_graphs) == 1
-    is_isomorphic(hierarchy, cf_graphs[0], node_match=eq, edge_match=eq)
+    assert is_isomorphic(hierarchy, cf_graphs[0], node_match=eq, edge_match=eq)
 
 
 def test_tails():

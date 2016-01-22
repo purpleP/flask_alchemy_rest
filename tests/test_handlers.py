@@ -39,8 +39,9 @@ def test_collection_handler(client):
     q_dict = {'spec': json.dumps(spec_dict)}
     response = client.get(level3_collection_url, query_string=q_dict)
     assert response.status_code == 200
+    data = json.loads(response.data)
     assert 'items' in data
-    assert data['items'] == correct_collection_data()
+    assert data['items'] == [correct_collection_data()[0]]
     spec_dict['name'] = 'foo'
     q_dict = {'spec': json.dumps(spec_dict)}
     response = client.get(level3_collection_url, query_string=q_dict)
@@ -100,6 +101,7 @@ def client_session():
     session.add(adam)
     session.add(eve)
     session.add(cain)
+    session.add(Level3(name='baz'))
     session.commit()
 
     app.add_url_rule(
@@ -230,5 +232,8 @@ def correct_collection_data():
     return [
         {
             'name': 'level3'
+        },
+        {
+            'name': 'baz'
         },
     ]

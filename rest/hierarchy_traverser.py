@@ -1,4 +1,5 @@
 from collections import namedtuple
+from copy import deepcopy
 from itertools import chain, groupby, islice
 
 from networkx import DiGraph, simple_cycles
@@ -31,8 +32,8 @@ def cycle_free_graphs(graph):
 def break_cycle(graph, node1, node2):
     g1 = graph.copy()
     g2 = graph.copy()
-    del g1[node1][node2]
-    del g2[node2][node1]
+    g1.remove_edge(node1, node2)
+    g2.remove_edge(node2, node1)
     return g1, g2
 
 
