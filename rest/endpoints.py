@@ -1,11 +1,12 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from functools import partial
 from itertools import chain
 
 from rest.handlers import get_item, post_item, \
     get_collection, \
     serialize_item, serialize_collection, deserialize_item, \
-    schema_class_for_model, post_item_many_to_many, delete_item, create_handler, \
+    schema_class_for_model, post_item_many_to_many, delete_item, \
+    create_handler, \
     post_handler
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
@@ -31,115 +32,100 @@ class Config(object):
         return True
 
 
-def endpoint_params_for_path(path, config, db_session, graph):
+def endpoints_params(endpoints):
+    es = chain.from_iterable(
+            map(
+                    lambda d: d.items(),
+                    chain.from_iterable(
+                            map(lambda x: x.values(), endpoints)
+                    )
+            )
+    )
+    return [EndpointParams(
+            rule=rh[0],
+            endpoint=rh[0] + method,
+            view_func=rh[1],
+            methods=[method]
+    )
+            for method, rh in es]
+
+
+def endpoints_for_path(path, config, db_session, graph):
     col_rule, item_rule = url_rules_for_path(path, config)
     ps = reversed_paths(path, config)
-    model_config = config[path[-1]]
-    get_collection_params = EndpointParams(
-            rule=col_rule,
-            endpoint=col_rule + 'GET',
-            view_func=create_handler(
+    model = path[-1]
+    model_config = config[model]
+    endpoints = defaultdict(dict)
+    endpoints['collection']['GET'] = (
+        col_rule, create_handler(
                 partial(
-                    get_collection,
-                    db_session,
-                    ps,
-                    model_config['collection_serializer']
-                )
-            ),
-            methods=['GET']
-    )
-    get_item_params = EndpointParams(
-            rule=item_rule,
-            endpoint=item_rule + 'GET',
-            view_func=create_handler(
-                partial(
-                    get_item,
-                    db_session,
-                    ps,
-                    model_config['item_serializer']
-                )
-            ),
-            methods=['GET']
-    )
-    delete_item_params = EndpointParams(
-            rule=item_rule,
-            endpoint=item_rule + 'DELETE',
-            view_func=create_handler(
-                partial(
-                    delete_item,
-                    db_session,
-                    ps
-                )
-            ),
-            methods=['DELETE']
-    )
-    # TODO make all nodes in graph to have identity arrow instead
-    if len(path) == 1:
-        rel_attr = None
-        post_item_params = EndpointParams(
-                rule=col_rule,
-                endpoint=col_rule + 'POST',
-                view_func=post_handler(
-                    partial(
-                        post_item,
+                        get_collection,
                         db_session,
                         ps,
-                        rel_attr,
-                        model_config['item_deserializer']
-                    )
-                ),
-                methods=['POST']
+                        model_config['collection_serializer']
+                )
+        )
+    )
+
+    def is_many_to_many():
+        return (path[-1], path[-2]) in graph.edges()
+
+    if len(path) == 1:
+        h = partial(
+                post_item,
+                db_session,
+                ps,
+                None,
+                model_config['item_deserializer']
         )
     else:
         rel_attr = graph[path[-2]][path[-1]]['rel_attr']
-        if (path[-1], path[-2]) in graph.edges():
-            post_item_params = EndpointParams(
-                    rule=col_rule,
-                    endpoint=col_rule + 'POST',
-                    view_func=post_handler(
-                            partial(
-                                    post_item_many_to_many,
-                                    db_session,
-                                    ps,
-                                    rel_attr
-                            )
-                    ),
-                    methods=['POST']
+        if is_many_to_many():
+            h = partial(
+                    post_item_many_to_many,
+                    db_session,
+                    ps,
+                    rel_attr
             )
         else:
-            post_item_params = EndpointParams(
-                    rule=col_rule,
-                    endpoint=col_rule + 'POST',
-                    view_func=post_handler(
-                            partial(
-                                    post_item,
-                                    db_session,
-                                    ps,
-                                    rel_attr,
-                                    model_config['item_deserializer']
-                            )
-                    ),
-                    methods=['POST']
+            h = partial(
+                    post_item,
+                    db_session,
+                    ps,
+                    rel_attr,
+                    model_config['item_deserializer']
             )
-    return get_collection_params, get_item_params, \
-           post_item_params, delete_item_params
+    endpoints['collection']['POST'] = (
+        col_rule, post_handler(h)
+    )
+    endpoints['item']['GET'] = (
+        item_rule, create_handler(
+                partial(
+                        get_item,
+                        db_session,
+                        ps,
+                        model_config['item_serializer']
+                )
+        )
+    )
+    endpoints['item']['DELETE'] = (
+        item_rule, create_handler(
+                partial(
+                        delete_item,
+                        db_session,
+                        ps
+                )
+        )
+    )
+    return model, endpoints
 
 
 def reversed_paths(path, config):
     return [(m, config[m]['exposed_attr']) for m in reversed(path)]
 
 
-def register_handlers(graph, root, config, db_session, app):
-    params = [endpoint_params_for_path(p, config, db_session, graph)
-              for p in all_paths(graph, root)]
-
-    [register_handler(app, endpoint_param) for endpoint_param in params]
-
-
-def register_handler(app, endpoint_params):
+def register_handlers(app, endpoint_params):
     for ep in endpoint_params:
-        app.add_url_rule(**ep._asdict())
-        app.add_url_rule(**ep._asdict())
         app.add_url_rule(**ep._asdict())
 
 
@@ -147,9 +133,21 @@ def default_config(models, db_session=None):
     return {m: default_cfg_for_model(m, db_session) for m in models}
 
 
-def create_default_api(root_model, db_session, app):
-    graph, default_conf = defaults_for_root(root_model, db_session)
-    register_handlers(graph, root_model, default_conf, db_session, app)
+def identity(x):
+    return x
+
+
+def create_api(root_model, db_session, app,
+               config_decorator=identity,
+               graph_decorator=identity,
+               endpoints_decorator=identity):
+    graph = graph_decorator(create_graph(root_model))
+    config = config_decorator(default_config(graph.nodes(), db_session))
+    params = [endpoints_for_path(p, config, db_session, graph)
+              for p in all_paths(graph, root_model)]
+    d = dict(params)
+    eps = endpoints_params(endpoints_decorator(d.values()))
+    register_handlers(app, eps)
 
 
 def defaults_for_root(root_model, db_session):

@@ -3,11 +3,10 @@ import json
 from flask import Flask
 from pytest import fixture
 from rest.endpoints import url_rules_for_path, default_config, \
-    register_handlers, reversed_paths, create_default_api
-from rest.hierarchy_traverser import cycle_free_graphs
+    reversed_paths, create_api
 from rest.introspect import find
 from tests.fixtures import Root, Level1, Level2, Level3, models_graphs, \
-    Parent, Child, session, hierarchy_data, cycled_data
+    Parent, Child, session, hierarchy_data
 from tests.flask_test_helpers import post_json, get_json
 
 path = [Root, Level1, Level2, Level3]
@@ -19,9 +18,11 @@ def test_register_handlers(state):
     app.debug = True
     client = app.test_client()
     hierarchy, with_cycles = models_graphs()
-    create_default_api(Root, session, app)
-    create_default_api(Parent, session, app)
-    create_default_api(Child, session, app)
+
+    create_api(Root, session, app)
+    create_api(Parent, session, app)
+    create_api(Child, session, app)
+
     all_data_to_upload = hierarchy_data()
     check_endpoints(client, '', all_data_to_upload, config, hierarchy, Root)
     response = post_json(client, '/parents', {'name': 'Adam'})
