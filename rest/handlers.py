@@ -8,10 +8,37 @@ from rest.query import query
 from sqlalchemy.orm.exc import NoResultFound
 
 
-def get_collection(db_session, path, serializer, *keys):
+def get_collection(db_session, path, serializer,  *keys):
     cq = query(db_session, path, keys)
     items = cq.all()
-    return jsonify({'items': serializer(items)})
+    return jsonify(serializer(items))
+
+
+# def handle(db_session, path, serializer, query_creator,
+#            fetch, spec=identity, *keys):
+#     q = query(db_session, path, keys)
+#     q = spec(q)
+#     try:
+#         data = fetch(q)
+#         return jsonify(serializer(data))
+#     except NoResultFound:
+#         return 'No such resource', 404
+#
+#
+# def get_collection_handler(handler):
+#     return partial(handler, fetch=fetch_all)
+#
+#
+# def get_item_handler(handler):
+#     return partial(handler, fetch=fetch_one)
+
+
+# def fetch_all(query):
+#     return query.all()
+#
+#
+# def fetch_one(query):
+#     return query.one()
 
 
 def get_item(db_session, path, serializer, *keys):
@@ -31,12 +58,14 @@ def create_handler(handler):
     def f(**kwargs):
         keys = keys_from_kwargs(**kwargs)
         return handler(*keys)
+
     return f
 
 
 def post_handler(handler):
     def f(**kwargs):
         return create_handler(partial(handler, data=request.json))(**kwargs)
+
     return f
 
 
@@ -61,7 +90,8 @@ def post_item(db_session, path, rel_attr_name,
 def post_item_many_to_many(db_session, path, rel_attr_name, *keys, **kwargs):
     _id = kwargs.pop('data')['id']
     model, exposed_attr = path[0]
-    item = db_session.query(model).filter(getattr(model, exposed_attr) == _id).one()
+    item = db_session.query(model).filter(
+            getattr(model, exposed_attr) == _id).one()
     parent = query(db_session, path[1:], keys).one()
     db_session.add(parent)
     getattr(parent, rel_attr_name).append(item)
@@ -96,7 +126,7 @@ def serialize_item(schema, item):
 
 
 def serialize_collection(schema, collection):
-    return schema.dump(collection, many=True).data
+    return {'items': schema.dump(collection, many=True).data}
 
 
 def schema_class_for_model(model_class):

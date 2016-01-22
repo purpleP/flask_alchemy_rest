@@ -1,5 +1,5 @@
 from flask import Flask
-from rest.endpoints import create_default_api
+from rest.endpoints import create_api
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 from tests.fixtures import Root, Parent, Child, ModelBase
@@ -21,7 +21,7 @@ if __name__ == '__main__':
             sessionmaker(autocommit=False, autoflush=False, bind=engine)
     )
     ModelBase.metadata.create_all(engine)
-    create_default_api(Parent, session, app)
-    create_default_api(Child, session, app)
+    create_api(Parent, session, app)
+    create_api(Child, session, app)
 
     app.run()

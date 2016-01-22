@@ -57,13 +57,13 @@ def test_register_handlers(state):
     assert data['parents'] == [adam_id, eve_id]
 
 
-
-def check_endpoints(client, url, all_data_to_upload, config, graph, start_node):
+def check_endpoints(client, url, all_data_to_upload, config, graph,
+                    start_node):
     url_name = config[start_node]['url_name']
     url = '/'.join([url, url_name])
     s = config[start_node]['collection_serializer']
     d = find(lambda x: isinstance(x[0], start_node), all_data_to_upload)
-    item_as_dict = s(d)[0]
+    item_as_dict = s(d)['items'][0]
     new_url = check_endpoint(client, url, item_as_dict)
     for s in graph.successors_iter(start_node):
         check_endpoints(client, new_url, all_data_to_upload, config, graph, s)
@@ -71,7 +71,6 @@ def check_endpoints(client, url, all_data_to_upload, config, graph, start_node):
     assert response.status_code == 200
     data = get_json(client, url)
     assert len(data['items']) == 0
-
 
 
 def check_endpoint(client, collection_url, item_as_dict):
