@@ -8,9 +8,10 @@ from rest.query import query
 from sqlalchemy.orm.exc import NoResultFound
 
 
-def get_collection(db_session, path, serializer,  *keys):
+def get_collection(db_session, path, serializer, *keys, **kwargs):
+    spec = kwargs.get('spec', lambda x: x)
     cq = query(db_session, path, keys)
-    items = cq.all()
+    items = spec(cq).all()
     return jsonify(serializer(items))
 
 
@@ -58,7 +59,21 @@ def create_handler(handler):
     def f(**kwargs):
         keys = keys_from_kwargs(**kwargs)
         return handler(*keys)
+    return f
 
+
+def get_handler(handler, specs={}):
+    def f(**kwargs):
+        spec_as_str = request.args.get('spec', None)
+        h = handler
+        if spec_as_str:
+            spec_dict = json.loads(spec_as_str)
+            try:
+                spec = partial(specs[spec_dict['name']], *spec_dict['args'])
+                h = partial(handler, spec=spec)
+            except KeyError:
+                return 'No such spec for this resource', 400
+        return create_handler(h)(**kwargs)
     return f
 
 

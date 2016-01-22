@@ -4,7 +4,7 @@ from functools import partial
 from flask import Flask
 from pytest import fixture
 from rest.handlers import schema_class_for_model, get_item, \
-    serialize_item, \
+    serialize_item, get_handler, \
     post_item, deserialize_item, get_collection, serialize_collection, \
     post_item_many_to_many, delete_item, create_handler, post_handler
 from tests.fixtures import Level3, state, \
@@ -35,6 +35,16 @@ def test_collection_handler(client):
     data = json.loads(response.data)
     assert 'items' in data
     assert data['items'] == correct_collection_data()
+    spec_dict = {'name': 'by_name', 'args': ('level3',)}
+    q_dict = {'spec': json.dumps(spec_dict)}
+    response = client.get(level3_collection_url, query_string=q_dict)
+    assert response.status_code == 200
+    assert 'items' in data
+    assert data['items'] == correct_collection_data()
+    spec_dict['name'] = 'foo'
+    q_dict = {'spec': json.dumps(spec_dict)}
+    response = client.get(level3_collection_url, query_string=q_dict)
+    assert response.status_code == 400
 
 
 def test_post_handler(client):
@@ -71,6 +81,10 @@ def test_post_many_to_many(client_session):
     adam = s.query(Parent).filter_by(name='Adam').one()
     assert len(adam.children) == 1
     assert adam.children[0].name == 'Cain'
+
+
+def by_name_spec(name, query):
+    return query.filter_by(name=name)
 
 
 @fixture
@@ -135,7 +149,8 @@ def client_session():
                 session,
                 paths()[0],
                 None,
-                partial(deserialize_item, schema_class_for_model(Root)(), session)
+                partial(deserialize_item,
+                        schema_class_for_model(Root)(), session)
             )
         ),
         methods=['POST']
@@ -156,13 +171,14 @@ def client_session():
     app.add_url_rule(
         rule=level3_collection_rule,
         endpoint='2',
-        view_func=create_handler(
+        view_func=get_handler(
             partial(
                 get_collection,
                 session,
                 paths()[-1],
                 partial(serialize_collection, schema_class_for_model(Level3)())
-            )
+            ),
+            {'by_name': by_name_spec}
         ),
         methods=['GET']
     )
