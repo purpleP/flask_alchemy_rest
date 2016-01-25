@@ -168,7 +168,6 @@ def serializers_maker(model, schema_factory, db_session):
 def default_cfg_for_model(model, db_session):
     i_ser, col_ser, i_des = serializers_maker(
             model, schema_maker, db_session)
-    # TODO think about more appropriate name or url_name
     return {
         'url_name': model.__tablename__,
         'item_serializer': i_ser,

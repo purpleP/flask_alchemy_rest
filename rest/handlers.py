@@ -9,38 +9,10 @@ from sqlalchemy.orm.exc import NoResultFound
 
 
 def get_collection(db_session, path, serializer, *keys, **kwargs):
-    # TODO think about what to do in case /parents/1/children
     spec = kwargs.get('spec', lambda x: x)
     cq = query(db_session, path, keys)
     items = spec(cq).all()
     return jsonify(serializer(items))
-
-
-# def handle(db_session, path, serializer, query_creator,
-#            fetch, spec=identity, *keys):
-#     q = query(db_session, path, keys)
-#     q = spec(q)
-#     try:
-#         data = fetch(q)
-#         return jsonify(serializer(data))
-#     except NoResultFound:
-#         return 'No such resource', 404
-#
-#
-# def get_collection_handler(handler):
-#     return partial(handler, fetch=fetch_all)
-#
-#
-# def get_item_handler(handler):
-#     return partial(handler, fetch=fetch_one)
-
-
-# def fetch_all(query):
-#     return query.all()
-#
-#
-# def fetch_one(query):
-#     return query.one()
 
 
 def get_item(db_session, path, serializer, *keys):
@@ -50,6 +22,54 @@ def get_item(db_session, path, serializer, *keys):
         return jsonify(serializer(item))
     except NoResultFound:
         return 'No such resource', 404
+
+
+def post_item(db_session, path, rel_attr_name, deserializer, *keys, **kwargs):
+    _, exposed_attr = path[0]
+    data = kwargs.pop('data')
+    try:
+        item = deserializer(data)
+        if len(path) == 1:
+            db_session.add(item)
+        else:
+            parent = query(db_session, path[1:], keys).one()
+            db_session.add(parent)
+            getattr(parent, rel_attr_name).append(item)
+        db_session.commit()
+        return jsonify({'id': getattr(item, exposed_attr)})
+    except SchemaError as e:
+        return json.dumps(e.errors), 400
+    except NoResultFound as e:
+        return 'Parent resource not found', 404
+
+
+def post_item_many_to_many(db_session, path, rel_attr_name, *keys, **kwargs):
+    _id = kwargs.pop('data')['id']
+    model, exposed_attr = path[0]
+    item = db_session.query(model).filter(
+            getattr(model, exposed_attr) == _id).one()
+    try:
+        parent = query(db_session, path[1:], keys).one()
+        db_session.add(parent)
+        getattr(parent, rel_attr_name).append(item)
+        db_session.commit()
+        return '', 200
+    except NoResultFound as e:
+        return 'Parent resource not found', 404
+
+
+
+def patch_item(db_session, path, data, *keys, **kwargs):
+    item_query = query(db_session, path, keys)
+    try:
+        item = item_query.one()
+        db_session.add(item)
+        for attr, new_value in data.iteritems():
+            setattr(item, attr, new_value)
+        db_session.commit()
+    except NoResultFound:
+        return 'No such resource', 404
+
 
 
 def keys_from_kwargs(**kwargs):
@@ -83,35 +103,6 @@ def post_handler(handler):
         return create_handler(partial(handler, data=request.json))(**kwargs)
     return f
 
-
-def post_item(db_session, path, rel_attr_name,
-              deserializer, *keys, **kwargs):
-    _, exposed_attr = path[0]
-    data = kwargs.pop('data')
-    try:
-        item = deserializer(data)
-        if len(path) == 1:
-            db_session.add(item)
-        else:
-            parent = query(db_session, path[1:], keys).one()
-            db_session.add(parent)
-            getattr(parent, rel_attr_name).append(item)
-        db_session.commit()
-        return jsonify({'id': getattr(item, exposed_attr)})
-    except SchemaError as e:
-        return json.dumps(e.errors), 400
-
-
-def post_item_many_to_many(db_session, path, rel_attr_name, *keys, **kwargs):
-    _id = kwargs.pop('data')['id']
-    model, exposed_attr = path[0]
-    item = db_session.query(model).filter(
-            getattr(model, exposed_attr) == _id).one()
-    parent = query(db_session, path[1:], keys).one()
-    db_session.add(parent)
-    getattr(parent, rel_attr_name).append(item)
-    db_session.commit()
-    return '', 200
 
 
 def delete_item(db_session, path, *keys):
@@ -152,3 +143,30 @@ def schema_maker(model_class, meta_dict={}):
             (ModelSchema,),
             {'Meta': schema_meta}
     )
+
+
+# def handle(db_session, path, serializer, query_creator,
+#            fetch, spec=identity, *keys):
+#     q = query(db_session, path, keys)
+#     q = spec(q)
+#     try:
+#         data = fetch(q)
+#         return jsonify(serializer(data))
+#     except NoResultFound:
+#         return 'No such resource', 404
+#
+#
+# def get_collection_handler(handler):
+#     return partial(handler, fetch=fetch_all)
+#
+#
+# def get_item_handler(handler):
+#     return partial(handler, fetch=fetch_one)
+
+
+# def fetch_all(query):
+#     return query.all()
+#
+#
+# def fetch_one(query):
+#     return query.one()

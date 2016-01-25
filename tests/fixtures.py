@@ -6,6 +6,7 @@ from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, \
      Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 ModelBase = declarative_base()
 
@@ -90,9 +91,11 @@ def items():
 @fixture(scope='module')
 def session():
     engine = create_engine(
-            'sqlite:///:memory:',
-            echo=False,
-            convert_unicode=True
+        'sqlite://',
+        echo=False,
+        convert_unicode=True,
+        connect_args={'check_same_thread': False},
+        poolclass=StaticPool,
     )
     session = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
     ModelBase.metadata.create_all(engine)
