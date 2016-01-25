@@ -9,6 +9,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 
 def get_collection(db_session, path, serializer, *keys, **kwargs):
+    # TODO think about what to do in case /parents/1/children
     spec = kwargs.get('spec', lambda x: x)
     cq = query(db_session, path, keys)
     items = spec(cq).all()
@@ -80,7 +81,6 @@ def get_handler(handler, specs={}):
 def post_handler(handler):
     def f(**kwargs):
         return create_handler(partial(handler, data=request.json))(**kwargs)
-
     return f
 
 
@@ -144,8 +144,9 @@ def serialize_collection(schema, collection):
     return {'items': schema.dump(collection, many=True).data}
 
 
-def schema_class_for_model(model_class):
-    schema_meta = type('Meta', (object,), {'model': model_class})
+def schema_maker(model_class, meta_dict={}):
+    meta_dict['model'] = model_class
+    schema_meta = type('Meta', (object,), meta_dict)
     return type(
             model_class.__name__ + 'Schema',
             (ModelSchema,),

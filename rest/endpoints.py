@@ -5,7 +5,7 @@ from itertools import chain
 from rest.handlers import get_item, post_item, \
     get_collection, \
     serialize_item, serialize_collection, deserialize_item, \
-    schema_class_for_model, post_item_many_to_many, delete_item, \
+    schema_maker, post_item_many_to_many, delete_item, \
     create_handler, \
     post_handler, get_handler
 from rest.hierarchy_traverser import all_paths, create_graph
@@ -42,11 +42,11 @@ def endpoints_params(endpoints):
             )
     )
     return [EndpointParams(
-                rule=rh[0],
-                endpoint=rh[0] + method,
-                view_func=rh[1],
-                methods=[method]
-            )
+            rule=rh[0],
+            endpoint=rh[0] + method,
+            view_func=rh[1],
+            methods=[method]
+    )
             for method, rh in es]
 
 
@@ -62,8 +62,9 @@ def endpoints_for_path(path, config, db_session, graph):
                         get_collection,
                         db_session,
                         ps,
-                        model_config['collection_serializer']
-                )
+                        model_config['collection_serializer'],
+                ),
+                model_config.get('specs', {})
         )
     )
 
@@ -156,19 +157,26 @@ def defaults_for_root(root_model, db_session):
     return graph, default_conf
 
 
-def default_cfg_for_model(model, db_session=None):
-    schema = schema_class_for_model(model)()
+def serializers_maker(model, schema_factory, db_session):
+    schema = schema_factory(model)()
+    item_serializer = partial(serialize_item, schema)
+    collection_serializer = partial(serialize_collection, schema)
+    item_deserializer = partial(deserialize_item, schema, db_session)
+    return item_serializer, collection_serializer, item_deserializer
+
+
+def default_cfg_for_model(model, db_session):
+    i_ser, col_ser, i_des = serializers_maker(
+            model, schema_maker, db_session)
+    # TODO think about more appropriate name or url_name
     return {
         'url_name': model.__tablename__,
-        'item_serializer': partial(serialize_item, schema),
-        'collection_serializer': partial(serialize_collection, schema),
-        'item_deserializer': partial(
-                deserialize_item,
-                schema,
-                db_session
-        ),
+        'item_serializer': i_ser,
+        'collection_serializer': col_ser,
+        'item_deserializer': i_des,
         'exposed_attr': pk_attr_name(model)[0],
-        'exposed_attr_type': 'int:' if pk_attr_name(model)[1] == int else ''
+        'exposed_attr_type': 'int:' if pk_attr_name(model)[1] == int else '',
+        'specs': {},
     }
 
 
