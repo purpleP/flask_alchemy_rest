@@ -5,59 +5,96 @@ from itertools import chain
 from flask import Flask
 from pytest import fixture
 from rest.handlers import schema_maker, get_item, \
-    serialize_item, get_handler, \
-    post_item, deserialize_item, get_collection, serialize_collection, \
-    post_item_many_to_many, delete_item, create_handler, post_handler
+     serialize_item, get_handler, \
+     post_item, deserialize_item, get_collection, serialize_collection, \
+     post_item_many_to_many, delete_item, create_handler, post_handler
 from tests.fixtures import Level3, state, \
-    level3_item_url, level3_collection_url, level3_item_rule, \
-    level3_collection_rule, paths, Root, Child, Parent, cycled_data, session, \
-    Level1, Level2
+     level3_item_url, level3_collection_url, level3_item_rule, \
+     level3_collection_rule, paths, Root, Child, Parent, cycled_data, session, \
+     Level1, Level2
 from tests.flask_test_helpers import get_json, post_json
 
 
-def test_collection_handler(session_, data_, client):
-    s, d, app = session_data_app
-    c = app.test_client()
-
-    app.add_url_rule(
-            rule=level3_collection_rule,
-            endpoint='2',
-            view_func=get_handler(
-                    partial(
-                            get_collection,
-                            s,
-                            paths()[-1],
-                            partial(serialize_collection,
-                                    schema_maker(Level3)())
-                    ),
-                    {'by_name': by_name_spec}
-            ),
-            methods=['GET']
-    )
-    root, l1, l2, l3 = d
+@fixture
+def empty_client(collection_client):
+    root, l1, l2, l3 = data()
     l1.level2s.append(l2)
     root.level1s.append(l1)
-    s.add(root)
-    s.commit()
-    collection_url = '/' + '/'.join(url_parts(d, url_names)[:-1])
+    client_[1].add(root)
+    client_[1].commit()
+    return client_
 
-    response = c.get(collection_url)
+
+@fixture
+def non_empty_client(client_):
+    root, l1, l2, l3 = data()
+    l1.level2s.append(l2)
+    root.level1s.append(l1)
+    l2.level3s.append(l3)
+    client_[1].add(root)
+    client_[1].commit()
+    return client_
+
+
+@fixture
+def search_client(client_):
+    root, l1, l2, l3 = data()
+    l1.level2s.append(l2)
+    root.level1s.append(l1)
+    l2.level3s.append(l3)
+    l2.level3s.append(Level3(name='find_me'))
+    client_[1].add(root)
+    client_[1].commit()
+    return client_
+
+
+
+@fixture
+def collection_client(session):
+    app = Flask('foo')
+    c = app.test_client()
+    app.add_url_rule(
+        rule=level3_collection_rule,
+        endpoint='2',
+        view_func=get_handler(
+            partial(
+                get_collection,
+                session,
+                paths()[-1],
+                partial(serialize_collection,
+                        schema_maker(Level3)())
+            ),
+            {'by_name': by_name_spec}
+        ),
+        methods=['GET']
+    )
+    return c, session
+
+l3_col_url = '/roots/root1/level1s/level1_1/level2s/level2_1/level3s'
+
+
+def test_empty_collection_handler(empty_client):
+    response = empty_client[0].get(l3_col_url)
     assert response.status_code == 200
     assert json.loads(response.data) == {'items': []}
-    l2.level3s.append(l3)
-    s.commit()
-    response = c.get(collection_url)
+
+
+def test_non_empty_collection_handler(non_empty_client):
+    response = non_empty_client[0].get(l3_col_url)
     assert response.status_code == 200
     assert json.loads(response.data) == {'items': [{'name': 'level3_1'}]}
-    response = search(c, collection_url, 'level3')
+
+
+def test_successfull_search_handler(search_client):
+    response = search(search_client[0], l3_col_url, 'find_me')
+    assert response.status_code == 200
+    assert json.loads(response.data) == {'items': [{'name': 'find_me'}]}
+
+
+def test_non_successfull_search_handler(search_client):
+    response = search(search_client[0], l3_col_url, 'foo')
     assert response.status_code == 200
     assert len(json.loads(response.data)['items']) == 0
-
-    l2.level3s.append(Level3(name='level3'))
-    s.commit()
-    response = search(c, collection_url, 'level3')
-    assert json.loads(response.data)['items'] == [{'name': 'level3'}]
-
 
 
 def test_item_handler(session_data_app):
@@ -65,17 +102,17 @@ def test_item_handler(session_data_app):
     c = app.test_client()
     root, l1, l2, l3 = d
     app.add_url_rule(
-            rule=level3_item_rule,
-            endpoint='1',
-            view_func=create_handler(
-                    partial(
-                            get_item,
-                            s,
-                            paths()[-1],
-                            partial(serialize_item, schema_maker(Level3)())
-                    )
-            ),
-            methods=['GET']
+        rule=level3_item_rule,
+        endpoint='1',
+        view_func=create_handler(
+            partial(
+                get_item,
+                s,
+                paths()[-1],
+                partial(serialize_item, schema_maker(Level3)())
+            )
+        ),
+        methods=['GET']
     )
     url = '/' + '/'.join(url_parts(d, url_names))
     check_404_with_no_data(c, url)
@@ -96,19 +133,19 @@ def test_post_item(session_data_app):
     s, d, app = session_data_app
     c = app.test_client()
     app.add_url_rule(
-            rule='/roots',
-            endpoint='/roots_post',
-            view_func=post_handler(
-                    partial(
-                            post_item,
-                            s,
-                            paths()[0],
-                            None,
-                            partial(deserialize_item,
-                                    schema_maker(Root)(), s)
-                    )
-            ),
-            methods=['POST']
+        rule='/roots',
+        endpoint='/roots_post',
+        view_func=post_handler(
+            partial(
+                post_item,
+                s,
+                paths()[0],
+                None,
+                partial(deserialize_item,
+                        schema_maker(Root)(), s)
+            )
+        ),
+        methods=['POST']
     )
     response = post_json(c, '/roots', {'name': 'root'})
     assert response.status_code == 200
@@ -200,115 +237,115 @@ def client_session():
     session.commit()
 
     app.add_url_rule(
-            rule='/parents/<level_0_id>',
-            endpoint='/parents_GET',
-            view_func=create_handler(
-                    partial(
-                            get_item,
-                            session,
-                            cycled_paths[0],
-                            partial(serialize_item, schema_maker(Parent)())
-                    )
-            ),
-            methods=['GET']
-    )
-    app.add_url_rule(
-            rule='/parents/<level_0_id>/children',
-            endpoint='/parents_post',
-            view_func=post_handler(
-                    partial(
-                            post_item_many_to_many,
-                            session,
-                            cycled_paths[1],
-                            'children'
-                    )
-            ),
-            methods=['POST']
-    )
-    app.add_url_rule(
-            rule='/roots/<level_0_id>',
-            endpoint='/roots_item_get',
-            view_func=create_handler(
-                    partial(
-                            get_item,
-                            session,
-                            paths()[0],
-                            partial(serialize_item, schema_maker(Root)())
-                    )
+        rule='/parents/<level_0_id>',
+        endpoint='/parents_GET',
+        view_func=create_handler(
+            partial(
+                get_item,
+                session,
+                cycled_paths[0],
+                partial(serialize_item, schema_maker(Parent)())
             )
+        ),
+        methods=['GET']
     )
     app.add_url_rule(
-            rule='/roots',
-            endpoint='/roots_post',
-            view_func=post_handler(
-                    partial(
-                            post_item,
-                            session,
-                            paths()[0],
-                            None,
-                            partial(deserialize_item,
-                                    schema_maker(Root)(), session)
-                    )
-            ),
-            methods=['POST']
+        rule='/parents/<level_0_id>/children',
+        endpoint='/parents_post',
+        view_func=post_handler(
+            partial(
+                post_item_many_to_many,
+                session,
+                cycled_paths[1],
+                'children'
+            )
+        ),
+        methods=['POST']
     )
     app.add_url_rule(
-            rule=level3_item_rule,
-            endpoint='1',
-            view_func=create_handler(
-                    partial(
-                            get_item,
-                            session,
-                            paths()[-1],
-                            partial(serialize_item, schema_maker(Level3)())
-                    )
-            ),
-            methods=['GET']
+        rule='/roots/<level_0_id>',
+        endpoint='/roots_item_get',
+        view_func=create_handler(
+            partial(
+                get_item,
+                session,
+                paths()[0],
+                partial(serialize_item, schema_maker(Root)())
+            )
+        )
     )
     app.add_url_rule(
-            rule=level3_collection_rule,
-            endpoint='2',
-            view_func=get_handler(
-                    partial(
-                            get_collection,
-                            session,
-                            paths()[-1],
-                            partial(serialize_collection,
-                                    schema_maker(Level3)())
-                    ),
-                    {'by_name': by_name_spec}
-            ),
-            methods=['GET']
+        rule='/roots',
+        endpoint='/roots_post',
+        view_func=post_handler(
+            partial(
+                post_item,
+                session,
+                paths()[0],
+                None,
+                partial(deserialize_item,
+                        schema_maker(Root)(), session)
+            )
+        ),
+        methods=['POST']
     )
     app.add_url_rule(
-            rule=level3_collection_rule,
-            endpoint='3',
-            view_func=post_handler(
-                    partial(
-                            post_item,
-                            session,
-                            paths()[-1],
-                            'level3s',
-                            partial(
-                                    deserialize_item,
-                                    schema_maker(Level3)(),
-                                    session
-                            )
-                    )
-            ),
-            methods=['POST']
+        rule=level3_item_rule,
+        endpoint='1',
+        view_func=create_handler(
+            partial(
+                get_item,
+                session,
+                paths()[-1],
+                partial(serialize_item, schema_maker(Level3)())
+            )
+        ),
+        methods=['GET']
     )
     app.add_url_rule(
-            rule=level3_item_rule,
-            endpoint='4',
-            view_func=create_handler(
-                    partial(
-                            delete_item,
-                            session,
-                            paths()[-1],
-                    )
+        rule=level3_collection_rule,
+        endpoint='2',
+        view_func=get_handler(
+            partial(
+                get_collection,
+                session,
+                paths()[-1],
+                partial(serialize_collection,
+                        schema_maker(Level3)())
             ),
-            methods=['DELETE']
+            {'by_name': by_name_spec}
+        ),
+        methods=['GET']
+    )
+    app.add_url_rule(
+        rule=level3_collection_rule,
+        endpoint='3',
+        view_func=post_handler(
+            partial(
+                post_item,
+                session,
+                paths()[-1],
+                'level3s',
+                partial(
+                    deserialize_item,
+                    schema_maker(Level3)(),
+                    session
+                )
+            )
+        ),
+        methods=['POST']
+    )
+    app.add_url_rule(
+        rule=level3_item_rule,
+        endpoint='4',
+        view_func=create_handler(
+            partial(
+                delete_item,
+                session,
+                paths()[-1],
+            )
+        ),
+        methods=['DELETE']
     )
 
     return app.test_client(), session
