@@ -2,7 +2,8 @@ from functools import partial
 
 from rest.hierarchy_traverser import tails
 from rest.query import query
-from tests.fixtures import paths, state
+from tests.fixtures import paths, state, Parent, Child, session
+from tests.test_handlers import parent_with_child, parent_child
 
 
 def test_query(state):
@@ -25,3 +26,13 @@ def check_column_query(session, path, keys, correct_items):
     cq = partial(query, session, path)
     result = cq(keys).all()
     assert result == correct_items
+
+
+def test_many_to_many_query(session):
+    parent_child(session)
+    session.commit()
+    keys = (2, )
+    path = [(Child, 'id'), (Parent, 'id')]
+    children = query(session, path, keys).all()
+    assert len(children) == 0
+

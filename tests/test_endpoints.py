@@ -55,6 +55,11 @@ def test_register_handlers(state):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data['parents'] == [adam_id, eve_id]
+    response = client.delete('/parents/' + str(eve_id) + '/children/' + str(cain_id))
+    assert response.status_code == 200
+    data = get_json(client, '/parents/' + str(eve_id) + '/children')
+    assert len(data['items']) == 0
+
 
 
 def check_endpoints(client, url, all_data_to_upload, config, graph,

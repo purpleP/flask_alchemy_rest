@@ -111,6 +111,16 @@ def delete_item(db_session, path, *keys):
     return '', 200
 
 
+def delete_many_to_many(db_session, path, rel_attr_name, *keys):
+    item = query(db_session, path, keys).one()
+    parent = query(db_session, path[1:], keys[1:]).one()
+    db_session.add(parent)
+    getattr(parent, rel_attr_name).remove(item)
+    db_session.commit()
+    return '', 200
+
+
+
 class SchemaError(ValueError):
     def __init__(self, errors):
         self.errors = errors

@@ -7,7 +7,7 @@ from rest.handlers import get_item, post_item, \
     serialize_item, serialize_collection, deserialize_item, \
     schema_maker, post_item_many_to_many, delete_item, \
     create_handler, \
-    post_handler, get_handler
+    post_handler, get_handler, delete_many_to_many
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
 
@@ -79,15 +79,16 @@ def endpoints_for_path(path, config, db_session, graph):
                 None,
                 model_config['item_deserializer']
         )
+        del_h = partial(
+                        delete_item,
+                        db_session,
+                        ps
+                )
     else:
         rel_attr = graph[path[-2]][path[-1]]['rel_attr']
         if is_many_to_many():
-            h = partial(
-                    post_item_many_to_many,
-                    db_session,
-                    ps,
-                    rel_attr
-            )
+            h = partial(post_item_many_to_many, db_session, ps, rel_attr)
+            del_h = partial(delete_many_to_many, db_session, ps, rel_attr)
         else:
             h = partial(
                     post_item,
@@ -96,6 +97,7 @@ def endpoints_for_path(path, config, db_session, graph):
                     rel_attr,
                     model_config['item_deserializer']
             )
+            del_h = partial(delete_item, db_session, ps)
     endpoints['collection']['POST'] = (
         col_rule, post_handler(h)
     )
@@ -110,13 +112,7 @@ def endpoints_for_path(path, config, db_session, graph):
         )
     )
     endpoints['item']['DELETE'] = (
-        item_rule, create_handler(
-                partial(
-                        delete_item,
-                        db_session,
-                        ps
-                )
-        )
+        item_rule, create_handler(del_h)
     )
     return model, endpoints
 
