@@ -8,8 +8,10 @@ from rest.handlers import get_item, post_item, \
     schema_maker, post_item_many_to_many, delete_item, \
     create_handler, \
     post_handler, get_handler, delete_many_to_many
+from rest.helpers import identity
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
+from rest.query import query, any_criterion, eq_criterion
 
 EndpointParams = namedtuple('EndpointParams',
                             ['rule', 'endpoint', 'view_func', 'methods'])
@@ -50,10 +52,37 @@ def endpoints_params(endpoints):
             for method, rh in es]
 
 
+def create_criteria(graph, config, child_model, parent_model):
+    parent_criteria = ()
+    if parent_model:
+        if (child_model, parent_model) in graph.edges():
+            rel_attr = graph[child_model][parent_model]['rel_attr']
+            parent_criteria = partial(
+                    any_criterion,
+                    getattr(child_model, rel_attr),
+                    config[parent_model]['exposed_attr']
+            )
+        else:
+            parent_criteria = partial(
+                    eq_criterion,
+                    getattr(parent_model, config[parent_model]['exposed_attr'])
+            )
+    else:
+        parent_criteria = ()
+    item_criteria = partial(
+            eq_criterion,
+            getattr(child_model, config[child_model]['exposed_attr'])
+    )
+    return parent_criteria, item_criteria
+
+
 def endpoints_for_path(path, config, db_session, graph):
-    col_rule, item_rule = url_rules_for_path(path, config)
-    ps = reversed_paths(path, config)
+    col_rule, item_rule = url_rules_for_path(path[1:], config)
     model = path[-1]
+
+    ps = list(reversed(path))
+    criteria = [create_criteria(graph, config, ch_m, p_m)
+                for ch_m, p_m in zip(ps, ps[1:])]
     model_config = config[model]
     endpoints = defaultdict(dict)
     endpoints['collection']['GET'] = (
@@ -61,15 +90,16 @@ def endpoints_for_path(path, config, db_session, graph):
                 partial(
                         get_collection,
                         db_session,
-                        ps,
+                        partial(
+                                query,
+                                model_to_query=model,
+
+                        ),
                         model_config['collection_serializer'],
                 ),
                 model_config.get('specs', {})
         )
     )
-
-    def is_many_to_many():
-        return (path[-1], path[-2]) in graph.edges()
 
     if len(path) == 1:
         h = partial(
@@ -80,10 +110,10 @@ def endpoints_for_path(path, config, db_session, graph):
                 model_config['item_deserializer']
         )
         del_h = partial(
-                        delete_item,
-                        db_session,
-                        ps
-                )
+                delete_item,
+                db_session,
+                ps
+        )
     else:
         rel_attr = graph[path[-2]][path[-1]]['rel_attr']
         if is_many_to_many():
@@ -117,10 +147,6 @@ def endpoints_for_path(path, config, db_session, graph):
     return model, endpoints
 
 
-def reversed_paths(path, config):
-    return [(m, config[m]['exposed_attr']) for m in reversed(path)]
-
-
 def register_handlers(app, endpoint_params):
     for ep in endpoint_params:
         app.add_url_rule(**ep._asdict())
@@ -130,18 +156,15 @@ def default_config(models, db_session=None):
     return {m: default_cfg_for_model(m, db_session) for m in models}
 
 
-def identity(x):
-    return x
-
-
 def create_api(root_model, db_session, app,
                config_decorator=identity,
                graph_decorator=identity,
                endpoints_decorator=identity):
     graph = graph_decorator(create_graph(root_model))
     config = config_decorator(default_config(graph.nodes(), db_session))
-    params = [endpoints_for_path(p, config, db_session, graph)
-              for p in all_paths(graph, root_model)]
+    all_ps = list(reversed(all_paths(graph, root_model)))
+    params = [endpoints_for_path([None] + path, config, db_session, graph)
+              for path in all_ps]
     d = dict(params)
     eps = endpoints_params(endpoints_decorator(d.values()))
     register_handlers(app, eps)

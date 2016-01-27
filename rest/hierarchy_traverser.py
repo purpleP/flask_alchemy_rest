@@ -1,8 +1,8 @@
 from collections import namedtuple
-from copy import deepcopy
-from itertools import chain, groupby, islice
+from itertools import chain, groupby
 
 from networkx import DiGraph, simple_cycles
+from rest.helpers import inits
 from rest.introspect import related_models
 
 ModelInfo = namedtuple('ModelInfo', 'model url_attr')
@@ -49,14 +49,6 @@ def all_paths(graph, node):
              for cf in cycle_free_graphs(graph)]
     ))
     return remove_duplicates(filter(lambda x: len(x) != 0, subs))
-
-
-def inits(_list):
-    return [_list[:i] for i in xrange(len(_list) + 1)]
-
-
-def tails(_list):
-    return [_list[i:] for i in xrange(len(_list) + 1)]
 
 
 def full_paths(graph, node):

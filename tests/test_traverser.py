@@ -6,8 +6,9 @@ from pytest import fixture
 
 import networkx as nx
 
-from rest.hierarchy_traverser import full_paths, inits, tails, create_graph, \
+from rest.hierarchy_traverser import full_paths, tails, create_graph, \
     cycle_free_graphs, all_paths
+from rest.helpers import inits, tails
 from rest.introspect import find
 from tests.fixtures import Root, models_graphs, Parent, Child
 

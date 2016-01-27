@@ -8,15 +8,15 @@ from rest.query import query
 from sqlalchemy.orm.exc import NoResultFound
 
 
-def get_collection(db_session, path, serializer, *keys, **kwargs):
+def get_collection(db_session, query, serializer, *keys, **kwargs):
     spec = kwargs.get('spec', lambda x: x)
-    cq = query(db_session, path, keys)
+    cq = query(session=db_session, keys=keys)
     items = spec(cq).all()
     return jsonify(serializer(items))
 
 
-def get_item(db_session, path, serializer, *keys):
-    item_query = query(db_session, path, keys)
+def get_item(db_session, query, serializer, *keys):
+    item_query = query(session=db_session, keys=keys)
     try:
         item = item_query.one()
         return jsonify(serializer(item))
@@ -24,17 +24,10 @@ def get_item(db_session, path, serializer, *keys):
         return 'No such resource', 404
 
 
-def post_item(db_session, path, rel_attr_name, deserializer, *keys, **kwargs):
-    _, exposed_attr = path[0]
-    data = kwargs.pop('data')
+def post_item(db_session, exposed_attr, adder, deserializer, *keys, **kwargs):
     try:
-        item = deserializer(data)
-        if len(path) == 1:
-            db_session.add(item)
-        else:
-            parent = query(db_session, path[1:], keys).one()
-            db_session.add(parent)
-            getattr(parent, rel_attr_name).append(item)
+        item = deserializer(kwargs.pop('data'))
+        adder(db_session, item, *keys)
         db_session.commit()
         return jsonify({'id': getattr(item, exposed_attr)})
     except SchemaError as e:
@@ -43,13 +36,22 @@ def post_item(db_session, path, rel_attr_name, deserializer, *keys, **kwargs):
         return 'Parent resource not found', 404
 
 
-def post_item_many_to_many(db_session, path, rel_attr_name, *keys, **kwargs):
-    _id = kwargs.pop('data')['id']
-    model, exposed_attr = path[0]
-    item = db_session.query(model).filter(
-            getattr(model, exposed_attr) == _id).one()
+def root_adder(db_session, item, *keys):
+    db_session.add(item)
+
+
+def non_root_adder(query, rel_attr_name, db_session, item, *keys):
+    parent = query(session=db_session, keys=keys).one()
+    db_session.add(parent)
+    getattr(parent, rel_attr_name).append(item)
+
+
+def post_item_many_to_many(db_session, item_query, parent_query, rel_attr_name,
+                           *keys, **kwargs):
     try:
-        parent = query(db_session, path[1:], keys).one()
+        _id = kwargs.pop('data')['id']
+        item = item_query(session=db_session, keys=(_id,)).one()
+        parent = parent_query(session=db_session, keys=keys).one()
         db_session.add(parent)
         getattr(parent, rel_attr_name).append(item)
         db_session.commit()
@@ -57,6 +59,20 @@ def post_item_many_to_many(db_session, path, rel_attr_name, *keys, **kwargs):
     except NoResultFound as e:
         return 'Parent resource not found', 404
 
+
+def delete_item(db_session, query, *keys):
+    db_session.delete(query(session=db_session, keys=keys).one())
+    db_session.commit()
+    return '', 200
+
+
+def delete_many_to_many(db_session, item_query, parent_query, rel_attr_name, *keys):
+    item = item_query(session=db_session, keys=keys).one()
+    parent = parent_query(session=db_session, keys=keys[1:]).one()
+    db_session.add(parent)
+    getattr(parent, rel_attr_name).remove(item)
+    db_session.commit()
+    return '', 200
 
 
 def patch_item(db_session, path, data, *keys, **kwargs):
@@ -71,7 +87,6 @@ def patch_item(db_session, path, data, *keys, **kwargs):
         return 'No such resource', 404
 
 
-
 def keys_from_kwargs(**kwargs):
     return tuple((kwargs[key] for key in sorted(kwargs.keys(), reverse=True)))
 
@@ -80,6 +95,7 @@ def create_handler(handler):
     def f(**kwargs):
         keys = keys_from_kwargs(**kwargs)
         return handler(*keys)
+
     return f
 
 
@@ -95,30 +111,15 @@ def get_handler(handler, specs={}):
             except KeyError:
                 return 'No such spec for this resource', 400
         return create_handler(h)(**kwargs)
+
     return f
 
 
 def post_handler(handler):
     def f(**kwargs):
         return create_handler(partial(handler, data=request.json))(**kwargs)
+
     return f
-
-
-
-def delete_item(db_session, path, *keys):
-    db_session.delete(query(db_session, path, keys).one())
-    db_session.commit()
-    return '', 200
-
-
-def delete_many_to_many(db_session, path, rel_attr_name, *keys):
-    item = query(db_session, path, keys).one()
-    parent = query(db_session, path[1:], keys[1:]).one()
-    db_session.add(parent)
-    getattr(parent, rel_attr_name).remove(item)
-    db_session.commit()
-    return '', 200
-
 
 
 class SchemaError(ValueError):
@@ -154,29 +155,3 @@ def schema_maker(model_class, meta_dict={}):
             {'Meta': schema_meta}
     )
 
-
-# def handle(db_session, path, serializer, query_creator,
-#            fetch, spec=identity, *keys):
-#     q = query(db_session, path, keys)
-#     q = spec(q)
-#     try:
-#         data = fetch(q)
-#         return jsonify(serializer(data))
-#     except NoResultFound:
-#         return 'No such resource', 404
-#
-#
-# def get_collection_handler(handler):
-#     return partial(handler, fetch=fetch_all)
-#
-#
-# def get_item_handler(handler):
-#     return partial(handler, fetch=fetch_one)
-
-
-# def fetch_all(query):
-#     return query.all()
-#
-#
-# def fetch_one(query):
-#     return query.one()

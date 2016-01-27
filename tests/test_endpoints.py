@@ -2,8 +2,7 @@ import json
 
 from flask import Flask
 from pytest import fixture
-from rest.endpoints import url_rules_for_path, default_config, \
-    reversed_paths, create_api
+from rest.endpoints import url_rules_for_path, default_config, create_api
 from rest.introspect import find
 from tests.fixtures import Root, Level1, Level2, Level3, models_graphs, \
     Parent, Child, session, hierarchy_data
@@ -55,11 +54,11 @@ def test_register_handlers(state):
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data['parents'] == [adam_id, eve_id]
-    response = client.delete('/parents/' + str(eve_id) + '/children/' + str(cain_id))
+    response = client.delete(
+        '/parents/' + str(eve_id) + '/children/' + str(cain_id))
     assert response.status_code == 200
     data = get_json(client, '/parents/' + str(eve_id) + '/children')
     assert len(data['items']) == 0
-
 
 
 def check_endpoints(client, url, all_data_to_upload, config, graph,

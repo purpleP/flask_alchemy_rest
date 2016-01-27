@@ -1,9 +1,12 @@
+from functools import partial
+
 import networkx as nx
 from pytest import fixture
-from rest.hierarchy_traverser import tails
+from rest.helpers import tails
+from rest.query import filter_
 
 from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, \
-     Table
+    Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -40,10 +43,10 @@ class Level2(ModelBase):
 
 
 association_table = Table(
-    'association',
-    ModelBase.metadata,
-    Column('parent_id', Integer, ForeignKey('parents.id')),
-    Column('child_id', Integer, ForeignKey('children.id'))
+        'association',
+        ModelBase.metadata,
+        Column('parent_id', Integer, ForeignKey('parents.id')),
+        Column('child_id', Integer, ForeignKey('children.id'))
 )
 
 
@@ -65,6 +68,14 @@ class Child(ModelBase):
             "Parent",
             secondary=association_table,
             back_populates="children")
+    grandchildrens = relationship('Grandchild')
+
+
+class Grandchild(ModelBase):
+    __tablename__ = 'blabla'
+    id = Column(Integer, primary_key=True)
+    child_id = Column(Integer, ForeignKey('children.id'))
+    name = Column(String)
 
 
 class Level3(ModelBase):
@@ -88,21 +99,21 @@ def items():
     return level2, level3
 
 
-@fixture(scope='module')
+@fixture()
 def session():
     engine = create_engine(
-        'sqlite://',
-        echo=False,
-        convert_unicode=True,
-        connect_args={'check_same_thread': False},
-        poolclass=StaticPool,
+            'sqlite://',
+            echo=False,
+            convert_unicode=True,
+            connect_args={'check_same_thread': False},
+            poolclass=StaticPool,
     )
     session = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
     ModelBase.metadata.create_all(engine)
     return session
 
 
-@fixture(scope='module')
+@fixture()
 def state():
     _session = session()
     root = Root(name='root')
@@ -159,7 +170,13 @@ def paths():
     return list(reversed(tails(pairs)))[1:]
 
 
-@fixture(scope='module')
+def query_modifiers():
+    qms = [partial(filter_, left=getattr(m, config[m]['exposed_attr']))
+           for m in full_path]
+    return {m: qms_ for m, qms_ in zip(full_path, tails(qms))}
+
+
+@fixture()
 def models_graphs():
     hierarchy = nx.DiGraph()
     hierarchy.add_edge(Root, Level1, rel_attr='level1s')
