@@ -7,11 +7,12 @@ from rest.handlers import get_item, post_item, \
     serialize_item, serialize_collection, deserialize_item, \
     schema_maker, post_item_many_to_many, delete_item, \
     create_handler, \
-    post_handler, get_handler, delete_many_to_many
+    request_data_wrapper, get_handler, delete_many_to_many, root_adder, \
+    patch_item
 from rest.helpers import identity
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
-from rest.query import query, any_criterion, eq_criterion
+from rest.query import query, filter_, join
 
 EndpointParams = namedtuple('EndpointParams',
                             ['rule', 'endpoint', 'view_func', 'methods'])
@@ -52,37 +53,28 @@ def endpoints_params(endpoints):
             for method, rh in es]
 
 
-def create_criteria(graph, config, child_model, parent_model):
-    parent_criteria = ()
-    if parent_model:
-        if (child_model, parent_model) in graph.edges():
-            rel_attr = graph[child_model][parent_model]['rel_attr']
-            parent_criteria = partial(
-                    any_criterion,
-                    getattr(child_model, rel_attr),
-                    config[parent_model]['exposed_attr']
-            )
-        else:
-            parent_criteria = partial(
-                    eq_criterion,
-                    getattr(parent_model, config[parent_model]['exposed_attr'])
-            )
+def create_query_modifiers(graph, config, ch_m, p_m):
+    im = partial(filter_, getattr(ch_m, config[ch_m]['exposed_attr']))
+    if (ch_m, p_m) in graph.edges():
+        jm = partial(join, p_m, graph[ch_m][p_m]['rel_attr'])
+        return im, jm
     else:
-        parent_criteria = ()
-    item_criteria = partial(
-            eq_criterion,
-            getattr(child_model, config[child_model]['exposed_attr'])
-    )
-    return parent_criteria, item_criteria
+        return im,
 
 
 def endpoints_for_path(path, config, db_session, graph):
     col_rule, item_rule = url_rules_for_path(path[1:], config)
     model = path[-1]
+    parent = path[-2]
 
     ps = list(reversed(path))
-    criteria = [create_criteria(graph, config, ch_m, p_m)
-                for ch_m, p_m in zip(ps, ps[1:])]
+    query_modifiers = tuple((create_query_modifiers(graph, config, ch_m, p_m)
+                             for ch_m, p_m in zip(ps, ps[1:])))
+    q = partial(
+            query,
+            model_to_query=model,
+            query_modifiers=query_modifiers,
+    )
     model_config = config[model]
     endpoints = defaultdict(dict)
     endpoints['collection']['GET'] = (
@@ -90,55 +82,78 @@ def endpoints_for_path(path, config, db_session, graph):
                 partial(
                         get_collection,
                         db_session,
-                        partial(
-                                query,
-                                model_to_query=model,
-
-                        ),
+                        q,
                         model_config['collection_serializer'],
                 ),
                 model_config.get('specs', {})
         )
     )
+    h = partial(
+            post_item,
+            db_session,
+            model_config['exposed_attr'],
+            root_adder,
+            model_config['item_deserializer'],
+    )
 
-    if len(path) == 1:
-        h = partial(
-                post_item,
-                db_session,
-                ps,
-                None,
-                model_config['item_deserializer']
+    del_h = partial(
+            delete_item,
+            db_session,
+            q,
+    )
+
+    if parent:
+        rel_attr = graph[parent][model]['rel_attr']
+        item_query = partial(
+                query,
+                model_to_query=model,
+                query_modifiers=(
+                    (
+                        partial(filter_, getattr(model,
+                                                 model_config[
+                                                     'exposed_attr'])),
+                    ),
+                )
         )
-        del_h = partial(
-                delete_item,
-                db_session,
-                ps
-        )
-    else:
-        rel_attr = graph[path[-2]][path[-1]]['rel_attr']
-        if is_many_to_many():
-            h = partial(post_item_many_to_many, db_session, ps, rel_attr)
-            del_h = partial(delete_many_to_many, db_session, ps, rel_attr)
-        else:
+        parent_query = partial(
+                            query,
+                            model_to_query=parent,
+                            query_modifiers=query_modifiers[1:]
+                    )
+        if (model, parent) in graph.edges():
             h = partial(
-                    post_item,
+                    post_item_many_to_many,
                     db_session,
-                    ps,
+                    item_query,
+                    parent_query,
                     rel_attr,
-                    model_config['item_deserializer']
             )
-            del_h = partial(delete_item, db_session, ps)
+            del_h = partial(
+                    delete_many_to_many,
+                    db_session,
+                    item_query,
+                    parent_query,
+                    rel_attr)
     endpoints['collection']['POST'] = (
-        col_rule, post_handler(h)
+        col_rule, request_data_wrapper(h)
     )
     endpoints['item']['GET'] = (
         item_rule, create_handler(
                 partial(
                         get_item,
                         db_session,
-                        ps,
+                        q,
                         model_config['item_serializer']
                 )
+        )
+    )
+    endpoints['item']['PATCH'] = (
+        item_rule, request_data_wrapper(
+            partial(
+                patch_item,
+                db_session,
+                q,
+            )
         )
     )
     endpoints['item']['DELETE'] = (

@@ -6,7 +6,7 @@ from rest.endpoints import url_rules_for_path, default_config, create_api
 from rest.introspect import find
 from tests.fixtures import Root, Level1, Level2, Level3, models_graphs, \
     Parent, Child, session, hierarchy_data
-from tests.flask_test_helpers import post_json, get_json
+from tests.flask_test_helpers import post_json, get_json, patch
 
 path = [Root, Level1, Level2, Level3]
 
@@ -71,7 +71,10 @@ def check_endpoints(client, url, all_data_to_upload, config, graph,
     new_url = check_endpoint(client, url, item_as_dict)
     for s in graph.successors_iter(start_node):
         check_endpoints(client, new_url, all_data_to_upload, config, graph, s)
-    response = client.delete(new_url)
+    response = patch(client, new_url, {'name': 'new_name'})
+    assert response.status_code == 200
+    new_url_parts = new_url.split('/')[:-1] + ['new_name']
+    response = client.delete('/'.join(new_url_parts))
     assert response.status_code == 200
     data = get_json(client, url)
     assert len(data['items']) == 0
@@ -109,23 +112,6 @@ def check_collection_is_empty(client, url):
 def test_default_config(config):
     pass
     # assert config == default_config(path)
-
-
-def test_reversed_paths():
-    path = [Parent, Child]
-    correct_output = [
-        (Child, 'id'),
-        (Parent, 'id'),
-    ]
-    config = {
-        Parent: {
-            'exposed_attr': 'id',
-        },
-        Child: {
-            'exposed_attr': 'id',
-        },
-    }
-    assert correct_output == reversed_paths(path, config)
 
 
 def test_url_for_path(config):

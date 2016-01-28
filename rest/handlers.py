@@ -4,7 +4,6 @@ from functools import partial
 
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
-from rest.query import query
 from sqlalchemy.orm.exc import NoResultFound
 
 
@@ -67,7 +66,7 @@ def delete_item(db_session, query, *keys):
 
 
 def delete_many_to_many(db_session, item_query, parent_query, rel_attr_name, *keys):
-    item = item_query(session=db_session, keys=keys).one()
+    item = item_query(session=db_session, keys=keys[0:1]).one()
     parent = parent_query(session=db_session, keys=keys[1:]).one()
     db_session.add(parent)
     getattr(parent, rel_attr_name).remove(item)
@@ -75,14 +74,15 @@ def delete_many_to_many(db_session, item_query, parent_query, rel_attr_name, *ke
     return '', 200
 
 
-def patch_item(db_session, path, data, *keys, **kwargs):
-    item_query = query(db_session, path, keys)
+def patch_item(db_session, query, *keys, **kwargs):
+    item_query = query(session=db_session, keys=keys)
     try:
         item = item_query.one()
         db_session.add(item)
-        for attr, new_value in data.iteritems():
+        for attr, new_value in kwargs.pop('data').iteritems():
             setattr(item, attr, new_value)
         db_session.commit()
+        return '', 200
     except NoResultFound:
         return 'No such resource', 404
 
@@ -115,7 +115,7 @@ def get_handler(handler, specs={}):
     return f
 
 
-def post_handler(handler):
+def request_data_wrapper(handler):
     def f(**kwargs):
         return create_handler(partial(handler, data=request.json))(**kwargs)
 

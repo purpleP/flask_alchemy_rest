@@ -5,6 +5,10 @@ def get_json(test_client, url, query_dict=None):
     return json.loads(test_client.get(url, query_string=query_dict).data)
 
 
+def patch(test_client, url, data):
+    return test_client.patch(url, data=json.dumps(data), content_type='application/json')
+
+
 def post_json(test_client, url, data):
     return test_client.post(url, data=json.dumps(data), content_type='application/json')
 

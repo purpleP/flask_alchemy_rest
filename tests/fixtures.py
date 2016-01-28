@@ -3,7 +3,7 @@ from functools import partial
 import networkx as nx
 from pytest import fixture
 from rest.helpers import tails
-from rest.query import filter_
+from rest.query import filter_, join
 
 from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, \
     Table
@@ -171,8 +171,8 @@ def paths():
 
 
 def query_modifiers():
-    qms = [partial(filter_, left=getattr(m, config[m]['exposed_attr']))
-           for m in full_path]
+    qms = tuple((partial(filter_, getattr(m, config[m]['exposed_attr'])),)
+                for m in full_path)
     return {m: qms_ for m, qms_ in zip(full_path, tails(qms))}
 
 
@@ -186,3 +186,71 @@ def models_graphs():
     cyclic.add_edge(Parent, Child, rel_attr='children')
     cyclic.add_edge(Child, Parent, rel_attr='parents')
     return hierarchy, cyclic
+
+
+def data():
+    root = Root(name='root1')
+    l1 = Level1(name='level1_1')
+    l2 = Level2(name='level2_1')
+    l3 = Level3(name='level3_1')
+    return root, l1, l2, l3
+
+
+def l0_empty(s):
+    pass
+
+
+def l3_empty(s):
+    root, l1, l2, l3 = data()
+    l1.level2s.append(l2)
+    root.level1s.append(l1)
+    s.add(root)
+    return s
+
+
+def l3_non_empty(s):
+    root, l1, l2, l3 = data()
+    l1.level2s.append(l2)
+    root.level1s.append(l1)
+    l2.level3s.append(l3)
+    s.add(root)
+    return s
+
+
+def parent_child(s):
+    s.add(Parent(name='Eve'))
+    s.add(Parent(name='Adam'))
+    s.add(Child(name='Cain'))
+    return s
+
+
+def parent_with_child(s):
+    eve = Parent(name='eve')
+    adam = Parent(name='Adam')
+    s.add(eve)
+    s.add(adam)
+    cain = Child(name='Cain')
+    s.add(cain)
+    adam.children.append(cain)
+    return s
+
+
+def search_session(s):
+    root, l1, l2, l3 = data()
+    l1.level2s.append(l2)
+    root.level1s.append(l1)
+    l2.level3s.append(l3)
+    l2.level3s.append(Level3(name='find_me'))
+    s.add(root)
+    return s
+
+
+child_collection_query_modifiers = (
+    (
+        (),
+        partial(join, Parent, Child.parents),
+    ),
+    (
+        partial(filter_, Parent.id),
+    ),
+)

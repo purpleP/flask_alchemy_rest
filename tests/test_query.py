@@ -1,10 +1,9 @@
 from functools import partial
 
 from rest.helpers import tails
-from rest.query import query, join, filter_, join_and_filter
-from tests.fixtures import paths, state, Parent, Child, session, Root, \
-    full_path, query_modifiers
-from tests.test_handlers import parent_with_child, parent_child
+from rest.query import query, zip_
+from tests.fixtures import Child, full_path, query_modifiers, \
+    parent_with_child, child_collection_query_modifiers
 
 
 def test_query(state):
@@ -35,16 +34,32 @@ def check_column_query(session, model_to_query, query_modifiers, keys,
     assert result == correct_items
 
 
+def add(x, y):
+    return x + y
+
+
+add2 = partial(add, 2)
+add23 = partial(add2, 3)
+
+
+def test_zip_():
+    fss = ((add2, add23), (add2,))
+    values = (1, 2)
+    output = [f(*vs) for f, vs in zip_(fss, values)]
+    assert output == [3, 5, 4]
+    fss = ((add2, add23), (add2,), (add2,))
+    output = [f(*vs) for f, vs in zip_(fss, values)]
+    assert output == [5, 3, 4]
+
+
 def test_many_to_many_query(session):
     parent_with_child(session)
     session.commit()
     keys = (1,)
-    jf = partial(
-            join_and_filter,
-            left_join=Parent,
-            right_join=Child.parents,
-            left=Parent.id
+    children_q = query(
+            session,
+            model_to_query=Child,
+            query_modifiers=child_collection_query_modifiers,
+            keys=keys
     )
-    query_modifiers = (jf, )
-    children = query(session, model_to_query=Child, query_modifiers=query_modifiers, keys=keys).all()
-    assert len(children) == 0
+    assert len(children_q.all()) == 0

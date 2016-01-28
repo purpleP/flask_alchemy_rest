@@ -6,75 +6,20 @@ import pytest
 from flask import Flask
 from rest.handlers import schema_maker, get_item, \
     serialize_item, get_handler, \
-    post_item, deserialize_item, get_collection, serialize_collection, \
-    post_item_many_to_many, delete_item, create_handler, post_handler, \
-    delete_many_to_many, root_adder, non_root_adder
-from rest.query import query, join_and_filter, join
+    get_collection, serialize_collection, \
+    delete_item, create_handler, delete_many_to_many, request_data_wrapper, post_item, \
+    root_adder, deserialize_item, non_root_adder, post_item_many_to_many, \
+    patch_item
+from rest.query import query, join, filter_
 from tests.fixtures import Level3, level3_item_rule, \
-    level3_collection_rule, paths, Root, Child, Parent, session, \
-    Level1, Level2, query_modifiers
-from tests.flask_test_helpers import post_json
-
-
-def data():
-    root = Root(name='root1')
-    l1 = Level1(name='level1_1')
-    l2 = Level2(name='level2_1')
-    l3 = Level3(name='level3_1')
-    return root, l1, l2, l3
+    level3_collection_rule, Child, Parent, session, \
+    query_modifiers, l3_empty, l3_non_empty, parent_child, parent_with_child, \
+    search_session, child_collection_query_modifiers, Root, l0_empty, Level2
+from tests.flask_test_helpers import post_json, patch
 
 
 def by_name_spec(name, query):
     return query.filter_by(name=name)
-
-
-def l0_empty(s):
-    pass
-
-
-def l3_empty(s):
-    root, l1, l2, l3 = data()
-    l1.level2s.append(l2)
-    root.level1s.append(l1)
-    s.add(root)
-    return s
-
-
-def l3_non_empty(s):
-    root, l1, l2, l3 = data()
-    l1.level2s.append(l2)
-    root.level1s.append(l1)
-    l2.level3s.append(l3)
-    s.add(root)
-    return s
-
-
-def parent_child(s):
-    s.add(Parent(name='Eve'))
-    s.add(Parent(name='Adam'))
-    s.add(Child(name='Cain'))
-    return s
-
-
-def parent_with_child(s):
-    eve = Parent(name='eve')
-    adam = Parent(name='Adam')
-    s.add(eve)
-    s.add(adam)
-    cain = Child(name='Cain')
-    s.add(cain)
-    adam.children.append(cain)
-    return s
-
-
-def search_session(s):
-    root, l1, l2, l3 = data()
-    l1.level2s.append(l2)
-    root.level1s.append(l1)
-    l2.level3s.append(l3)
-    l2.level3s.append(Level3(name='find_me'))
-    s.add(root)
-    return s
 
 
 def client(handler_maker, methods, rule, s, *args, **kwargs):
@@ -122,16 +67,11 @@ class ParamsFactory(object):
 
 l3_query = partial(query, model_to_query=Level3, query_modifiers=query_modifiers()[Level3])
 
-child_query_modifiers = (
-    partial(
-        join_and_filter,
-        left_join=Parent,
-        right_join=Child.parents,
-        left=Parent.id
-    ),
+child_query = partial(
+    query,
+    model_to_query=Child,
+    query_modifiers=child_collection_query_modifiers,
 )
-
-child_query = partial(query, model_to_query=Child, query_modifiers=child_query_modifiers)
 
 
 class BasicGetParams(ParamsFactory):
@@ -345,12 +285,19 @@ def test_delete_many_to_many(session):
                                 query,
                                 model_to_query=Child,
                                 query_modifiers=(
-                                    partial(join, left=Parent, )
+                                    (
+                                        partial(filter_, Child.id),
+                                    ),
                                 )
                             ),
-                            partial(query, model_to_query=Parent, criteria=(
-                                partial(eq_criterion, Parent.id),
-                            )
+                            partial(
+                                query,
+                                model_to_query=Parent,
+                                query_modifiers=(
+                                    (
+                                        partial(filter_, Parent.id),
+                                    ),
+                                )
                             ),
                             'children',
                             )
@@ -375,85 +322,118 @@ def load_family(ses):
     return adam, cain
 
 
-# def test_post_root(session):
-#     c = client(
-#             handler_maker=lambda s: post_handler(
-#                     partial(
-#                             post_item,
-#                             s,
-#                             'name',
-#                             root_adder,
-#                             partial(deserialize_item,
-#                                     schema_maker(Root)(), s)
-#                     )
-#             ),
-#             methods=['POST'],
-#             session_modifier=l0_empty,
-#             rule='/roots',
-#             s=session,
-#     )
-#     response = post_json(c, '/roots', {'name': 'root_1'})
-#     assert response.status_code == 200
-#     roots = session.query(Root).all()
-#     assert len(roots) == 1
-#     assert roots[0].name == 'root_1'
+def test_post_root(session):
+    c = client(
+            handler_maker=lambda s: request_data_wrapper(
+                    partial(
+                            post_item,
+                            s,
+                            'name',
+                            root_adder,
+                            partial(deserialize_item,
+                                    schema_maker(Root)(), s)
+                    )
+            ),
+            methods=['POST'],
+            session_modifier=l0_empty,
+            rule='/roots',
+            s=session,
+    )
+    response = post_json(c, '/roots', {'name': 'root_1'})
+    assert response.status_code == 200
+    roots = session.query(Root).all()
+    assert len(roots) == 1
+    assert roots[0].name == 'root_1'
 
 
-# def test_post_non_root(session):
-#     q = partial(query, model_to_query=Level2, criteria=criteria()[Level2])
-#     c = client(
-#             handler_maker=lambda s: post_handler(
-#                     partial(
-#                             post_item,
-#                             s,
-#                             'name',
-#                             partial(non_root_adder, q, 'level3s'),
-#                             partial(deserialize_item,
-#                                     schema_maker(Level3)(), s)
-#                     )
-#             ),
-#             methods=['POST'],
-#             session_modifier=l3_empty,
-#             rule=level3_collection_rule,
-#             s=session,
-#     )
-#     response = post_json(c, l3_col_url, {'name': 'level3_1'})
-#     assert response.status_code == 200
-#     l3s = session.query(Level2).one().level3s
-#     assert len(l3s) == 1
-#     assert l3s[0].name == 'level3_1'
+def test_post_non_root(session):
+    q = partial(query, model_to_query=Level2, query_modifiers=query_modifiers()[Level2])
+    c = client(
+            handler_maker=lambda s: request_data_wrapper(
+                    partial(
+                            post_item,
+                            s,
+                            'name',
+                            partial(non_root_adder, q, 'level3s'),
+                            partial(deserialize_item,
+                                    schema_maker(Level3)(), s)
+                    )
+            ),
+            methods=['POST'],
+            session_modifier=l3_empty,
+            rule=level3_collection_rule,
+            s=session,
+    )
+    response = post_json(c, l3_col_url, {'name': 'level3_1'})
+    assert response.status_code == 200
+    l3s = session.query(Level2).one().level3s
+    assert len(l3s) == 1
+    assert l3s[0].name == 'level3_1'
 
 
-# def test_post_many_to_many(session):
-#     iq = partial(
-#             query,
-#             model_to_query=Child,
-#             criteria=(partial(eq_criterion, Child.id),)
-#     )
-#     pq = partial(
-#             query,
-#             model_to_query=Parent,
-#             criteria=(partial(eq_criterion, Parent.id),)
-#     )
-#     c = client(
-#             handler_maker=lambda s: post_handler(
-#                     partial(
-#                             post_item_many_to_many,
-#                             s,
-#                             iq,
-#                             pq,
-#                             'children'
-#                     )
-#             ),
-#             methods=['POST'],
-#             session_modifier=parent_child,
-#             rule='/parents/<level_0_id>/children',
-#             s=session,
-#     )
-#     adam, cain = load_family(session)
-#     response = post_json(c, '/parents/' + str(adam.id) + '/children',
-#                          {'id': cain.id})
-#     assert response.status_code == 200
-#     adam, cain = load_family(session)
-#     assert cain in adam.children
-#     assert adam in cain.parents
+def test_post_many_to_many(session):
+    iq = partial(
+            query,
+            model_to_query=Child,
+            query_modifiers=(
+                (
+                    partial(filter_, Child.id),
+                ),
+            )
+    )
+    pq = partial(
+            query,
+            model_to_query=Parent,
+            query_modifiers=(
+                (
+                    partial(filter_, Parent.id),
+                ),
+            )
+    )
+    c = client(
+            handler_maker=lambda s: request_data_wrapper(
+                    partial(
+                            post_item_many_to_many,
+                            s,
+                            iq,
+                            pq,
+                            'children'
+                    )
+            ),
+            methods=['POST'],
+            session_modifier=parent_child,
+            rule='/parents/<level_0_id>/children',
+            s=session,
+    )
+    adam, cain = load_family(session)
+    response = post_json(c, '/parents/' + str(adam.id) + '/children',
+                         {'id': cain.id})
+    assert response.status_code == 200
+    adam, cain = load_family(session)
+    assert cain in adam.children
+    assert adam in cain.parents
+
+
+def test_patch(session):
+    c = client(
+        handler_maker=lambda s: request_data_wrapper(
+            partial(
+                    patch_item,
+                    s,
+                    l3_query,
+            )
+        ),
+        methods=['PATCH'],
+        session_modifier=l3_non_empty,
+        rule=level3_item_rule,
+        s=session,
+    )
+    response = patch(c, l3_item_url, {'name': 'l3_new_name'})
+    assert response.status_code == 200
+    l3s = session.query(Level3).filter_by(name='level3_1').all()
+    assert len(l3s) == 0
+    l3s = session.query(Level3).filter_by(name='l3_new_name').all()
+    assert len(l3s) == 1
+
+
+
