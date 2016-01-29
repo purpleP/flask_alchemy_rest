@@ -21,20 +21,15 @@ def add_model(graph, model):
             add_model(graph, m)
 
 
-def cycle_free_graphs(graph):
-    gs = [break_cycle(graph, *c) for c in simple_cycles(graph) if len(c) == 2]
-    if len(gs) == 0:
-        return [graph]
+def break_cycles(graph):
+    cycles = list(simple_cycles(graph))
+    if len(cycles) == 0:
+        return graph
     else:
-        return chain.from_iterable(gs)
-
-
-def break_cycle(graph, node1, node2):
-    g1 = graph.copy()
-    g2 = graph.copy()
-    g1.remove_edge(node1, node2)
-    g2.remove_edge(node2, node1)
-    return g1, g2
+        nodes = cycles[0]
+        g1 = graph.copy()
+        g1.remove_edge(nodes[-1], nodes[0])
+    return break_cycles(g1)
 
 
 def leaves(graph):
@@ -44,10 +39,8 @@ def leaves(graph):
 
 
 def all_paths(graph, node):
-    subs = list(chain.from_iterable(
-            [list(chain.from_iterable(map(inits, full_paths(cf, node))))
-             for cf in cycle_free_graphs(graph)]
-    ))
+    cf = break_cycles(graph)
+    subs = list(chain.from_iterable(map(inits, full_paths(cf, node))))
     return remove_duplicates(filter(lambda x: len(x) != 0, subs))
 
 
