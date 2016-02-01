@@ -3,7 +3,7 @@ from functools import partial
 from rest.helpers import tails
 from rest.query import query, zip_
 from tests.fixtures import Child, full_path, query_modifiers, \
-    parent_with_child, child_collection_query_modifiers
+    parent_with_child, child_collection_query_modifiers, session, state
 
 
 def test_query(state):

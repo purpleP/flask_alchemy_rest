@@ -4,7 +4,7 @@ from functools import partial
 
 import pytest
 from flask import Flask
-from rest.handlers import schema_maker, get_item, \
+from rest.handlers import create_schema, get_item, \
     serialize_item, get_handler, \
     get_collection, serialize_collection, \
     delete_item, create_handler, delete_many_to_many, request_data_wrapper, post_item, \
@@ -115,7 +115,7 @@ class NonEmptyChildCollectionParams(BasicChildCollectionParams):
                                 s,
                                 child_query,
                                 partial(serialize_collection,
-                                        schema_maker(Child)())
+                                        create_schema(Child)())
                         )
                 ),
                 *args,
@@ -134,7 +134,7 @@ class EmptyChildCollectionParams(BasicChildCollectionParams):
                         get_collection,
                         s,
                         child_query,
-                        partial(serialize_collection, schema_maker(Child)())
+                        partial(serialize_collection, create_schema(Child)())
                     )
                 ),
                 *args, **kwargs)
@@ -151,7 +151,7 @@ class BasicCollectionParams(BasicGetParams):
                         s,
                         l3_query,
                         partial(serialize_collection,
-                                schema_maker(Level3)())
+                                create_schema(Level3)())
                 ),
                 {'by_name': by_name_spec}
         )
@@ -213,7 +213,7 @@ class BasicItemParams(BasicGetParams):
                         s,
                         l3_query,
                         partial(serialize_item,
-                                schema_maker(Level3)())
+                                create_schema(Level3)())
                 )
         )
         super(BasicItemParams, self).__init__(
@@ -331,7 +331,7 @@ def test_post_root(session):
                             'name',
                             root_adder,
                             partial(deserialize_item,
-                                    schema_maker(Root)(), s)
+                                    create_schema(Root)(), s)
                     )
             ),
             methods=['POST'],
@@ -356,7 +356,7 @@ def test_post_non_root(session):
                             'name',
                             partial(non_root_adder, q, 'level3s'),
                             partial(deserialize_item,
-                                    schema_maker(Level3)(), s)
+                                    create_schema(Level3)(), s)
                     )
             ),
             methods=['POST'],

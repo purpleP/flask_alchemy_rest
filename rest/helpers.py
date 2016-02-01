@@ -1,4 +1,5 @@
 from functools import reduce
+from operator import concat
 
 
 def inits(_list):
@@ -15,6 +16,10 @@ def identity(x):
 
 def compose(*functions):
     return reduce(lambda f, g: lambda x: f(*g(*x)), functions, identity)
+
+
+def concat_(seqs):
+    return reduce(concat, seqs, ())
 
 
 def apply_(f, *args, **kwargs):

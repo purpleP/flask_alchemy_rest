@@ -146,7 +146,7 @@ def serialize_collection(schema, collection):
     return {'items': schema.dump(collection, many=True).data}
 
 
-def schema_maker(model_class, meta_dict={}):
+def create_schema(model_class, meta_dict={}):
     meta_dict['model'] = model_class
     schema_meta = type('Meta', (object,), meta_dict)
     return type(

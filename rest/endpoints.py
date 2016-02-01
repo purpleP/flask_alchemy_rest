@@ -1,11 +1,11 @@
 from collections import namedtuple, defaultdict
 from functools import partial
-from itertools import chain
+from itertools import chain, groupby
 
 from rest.handlers import get_item, post_item, \
     get_collection, \
     serialize_item, serialize_collection, deserialize_item, \
-    schema_maker, post_item_many_to_many, delete_item, \
+    create_schema, post_item_many_to_many, delete_item, \
     create_handler, \
     request_data_wrapper, get_handler, delete_many_to_many, root_adder, \
     patch_item
@@ -36,21 +36,15 @@ class Config(object):
 
 
 def endpoints_params(endpoints):
-    es = chain.from_iterable(
-            map(
-                    lambda d: d.items(),
-                    chain.from_iterable(
-                            map(lambda x: x.values(), endpoints)
-                    )
-            )
-    )
     return [EndpointParams(
-            rule=rh[0],
-            endpoint=rh[0] + method,
-            view_func=rh[1],
-            methods=[method]
+        rule=rh[0],
+        endpoint=rh[0] + method,
+        view_func=rh[1],
+        methods=[method]
     )
-            for method, rh in es]
+        for eps in endpoints
+        for j in eps.values()
+        for method, rh in j.iteritems()]
 
 
 def create_query_modifiers(graph, config, ch_m, p_m):
@@ -177,12 +171,22 @@ def create_api(root_model, db_session, app,
                endpoints_decorator=identity):
     graph = graph_decorator(create_graph(root_model))
     config = config_decorator(default_config(graph.nodes(), db_session))
-    all_ps = list(reversed(all_paths(graph, root_model)))
-    params = [endpoints_for_path([None] + path, config, db_session, graph)
+    all_ps = tuple(reversed(tuple(all_paths(graph, root_model))))
+    params = [endpoints_for_path((None,) + path, config, db_session, graph)
               for path in all_ps]
-    d = dict(params)
-    eps = endpoints_params(endpoints_decorator(d.values()))
+
+    def key(x):
+        return x[0]
+    sp = sorted(params, key=key)
+    by_model = groupby(sp, key=key)
+    d = {m: map(partial(my_getitem, 1), params) for m, params in by_model}
+    d = endpoints_decorator(d)
+    eps = endpoints_params(chain.from_iterable(d.values()))
     register_handlers(app, eps)
+
+
+def my_getitem(index, list_):
+    return list_[index]
 
 
 def defaults_for_root(root_model, db_session):
@@ -201,7 +205,7 @@ def serializers_maker(model, schema_factory, db_session):
 
 def default_cfg_for_model(model, db_session):
     i_ser, col_ser, i_des = serializers_maker(
-            model, schema_maker, db_session)
+            model, create_schema, db_session)
     return {
         'url_name': model.__tablename__,
         'item_serializer': i_ser,

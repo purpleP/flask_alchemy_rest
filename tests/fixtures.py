@@ -185,6 +185,7 @@ def models_graphs():
     cyclic = nx.DiGraph()
     cyclic.add_edge(Parent, Child, rel_attr='children')
     cyclic.add_edge(Child, Parent, rel_attr='parents')
+    cyclic.add_edge(Child, Grandchild, rel_attr='grandchildrens')
     return hierarchy, cyclic
 
 
