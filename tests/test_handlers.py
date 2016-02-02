@@ -5,16 +5,16 @@ from functools import partial
 import pytest
 from flask import Flask
 from rest.handlers import create_schema, get_item, \
-    serialize_item, get_handler, \
-    get_collection, serialize_collection, \
-    delete_item, create_handler, delete_many_to_many, request_data_wrapper, post_item, \
-    root_adder, deserialize_item, non_root_adder, post_item_many_to_many, \
-    patch_item
-from rest.query import query, join, filter_
+     serialize_item, get_handler, \
+     get_collection, serialize_collection, \
+     delete_item, create_handler, delete_many_to_many, \
+     post_item, root_adder, deserialize_item, non_root_adder, \
+     post_item_many_to_many, patch_item, data_handler
+from rest.query import query, filter_
 from tests.fixtures import Level3, level3_item_rule, \
-    level3_collection_rule, Child, Parent, session, \
-    query_modifiers, l3_empty, l3_non_empty, parent_child, parent_with_child, \
-    search_session, child_collection_query_modifiers, Root, l0_empty, Level2
+     level3_collection_rule, Child, Parent, session, \
+     query_modifiers, l3_empty, l3_non_empty, parent_child, parent_with_child, \
+     search_session, child_collection_query_modifiers, Root, l0_empty, Level2
 from tests.flask_test_helpers import post_json, patch
 
 
@@ -324,7 +324,7 @@ def load_family(ses):
 
 def test_post_root(session):
     c = client(
-            handler_maker=lambda s: request_data_wrapper(
+            handler_maker=lambda s: data_handler(
                     partial(
                             post_item,
                             s,
@@ -349,7 +349,7 @@ def test_post_root(session):
 def test_post_non_root(session):
     q = partial(query, model_to_query=Level2, query_modifiers=query_modifiers()[Level2])
     c = client(
-            handler_maker=lambda s: request_data_wrapper(
+            handler_maker=lambda s: data_handler(
                     partial(
                             post_item,
                             s,
@@ -391,7 +391,7 @@ def test_post_many_to_many(session):
             )
     )
     c = client(
-            handler_maker=lambda s: request_data_wrapper(
+            handler_maker=lambda s: data_handler(
                     partial(
                             post_item_many_to_many,
                             s,
@@ -416,7 +416,7 @@ def test_post_many_to_many(session):
 
 def test_patch(session):
     c = client(
-        handler_maker=lambda s: request_data_wrapper(
+        handler_maker=lambda s: data_handler(
             partial(
                     patch_item,
                     s,

@@ -1,6 +1,7 @@
 import json
 
 from functools import partial
+from helpers import compose
 
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
@@ -9,9 +10,25 @@ from sqlalchemy.orm.exc import NoResultFound
 
 def get_collection(db_session, query, serializer, *keys, **kwargs):
     spec = kwargs.get('spec', lambda x: x)
+    from_ = kwargs.get('from_', None)
+    count = kwargs.get('count', None)
+    page_num = kwargs.get('page_num', None)
+    page_size = kwargs.get('page_size', None)
     cq = query(session=db_session, keys=keys)
-    items = spec(cq).all()
-    return jsonify(serializer(items))
+    scq = spec(cq)
+    if page_num is not None and page_size is not None:
+        count = scq.count()
+        page_count = count / page_size
+        offset = page_count * page_num
+        limit = offset + page_size
+        q = scq.offset(offset).limit(limit)
+        items = q.all()
+        output = serializer(items)
+        output['total'] = count
+        output['count'] = len(items)
+    else:
+        output = serializer(scq.all())
+    return jsonify(output)
 
 
 def get_item(db_session, query, serializer, *keys):
@@ -92,34 +109,57 @@ def keys_from_kwargs(**kwargs):
 
 
 def create_handler(handler):
-    def f(**kwargs):
-        keys = keys_from_kwargs(**kwargs)
-        return handler(*keys)
+    return wrap(handler, keys_wrapper)
 
-    return f
+
+def wrap(f, wrapper):
+    def z(*args, **kwargs):
+        args, kwargs = wrapper(*args, **kwargs)
+        return f(*args, **kwargs)
+    return z
+
+
+def keys_wrapper(*args, **kwargs):
+    return keys_from_kwargs(**kwargs), {}
+
+
+def spec_wrapper(specs, *args, **kwargs):
+    spec_as_str = request.args.get('spec', None)
+    if spec_as_str:
+        spec_dict = json.loads(spec_as_str)
+        try:
+            spec = partial(specs[spec_dict['name']], *spec_dict['args'])
+            kwargs['spec'] = spec
+        except KeyError:
+            return 'No such spec for this resource', 400
+    return args, kwargs
+
+
+def request_data_wrapper(*args, **kwargs):
+    kwargs['data'] = json.loads(request.data)
+    return args, kwargs
 
 
 def get_handler(handler, specs={}):
-    def f(**kwargs):
-        spec_as_str = request.args.get('spec', None)
-        h = handler
-        if spec_as_str:
-            spec_dict = json.loads(spec_as_str)
-            try:
-                spec = partial(specs[spec_dict['name']], *spec_dict['args'])
-                h = partial(handler, spec=spec)
-            except KeyError:
-                return 'No such spec for this resource', 400
-        return create_handler(h)(**kwargs)
-
-    return f
+    w = compose(
+        partial(spec_wrapper, specs),
+        cursor_wrapper,
+        keys_wrapper,
+    )
+    return wrap(handler, w)
 
 
-def request_data_wrapper(handler):
-    def f(**kwargs):
-        return create_handler(partial(handler, data=request.json))(**kwargs)
+def data_handler(handler):
+    w = compose(request_data_wrapper, keys_wrapper)
+    return wrap(handler, w)
 
-    return f
+
+def cursor_wrapper(*args, **kwargs):
+    page_num = request.args.get('page', None)
+    page_size = request.args.get('size', None)
+    kwargs['page_num'] = int(page_num) if page_num else None
+    kwargs['page_size'] = int(page_size) if page_size else None
+    return args, kwargs
 
 
 class SchemaError(ValueError):

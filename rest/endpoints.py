@@ -7,7 +7,7 @@ from rest.handlers import get_item, post_item, \
     serialize_item, serialize_collection, deserialize_item, \
     create_schema, post_item_many_to_many, delete_item, \
     create_handler, \
-    request_data_wrapper, get_handler, delete_many_to_many, root_adder, \
+    data_handler, get_handler, delete_many_to_many, root_adder, \
     patch_item
 from rest.helpers import identity
 from rest.hierarchy_traverser import all_paths, create_graph
@@ -129,7 +129,7 @@ def endpoints_for_path(path, config, db_session, graph):
                     parent_query,
                     rel_attr)
     endpoints['collection']['POST'] = (
-        col_rule, request_data_wrapper(h)
+        col_rule, data_handler(h)
     )
     endpoints['item']['GET'] = (
         item_rule, create_handler(
@@ -142,7 +142,7 @@ def endpoints_for_path(path, config, db_session, graph):
         )
     )
     endpoints['item']['PATCH'] = (
-        item_rule, request_data_wrapper(
+        item_rule, data_handler(
             partial(
                 patch_item,
                 db_session,

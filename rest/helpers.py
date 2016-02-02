@@ -14,8 +14,18 @@ def identity(x):
     return x
 
 
-def compose(*functions):
-    return reduce(lambda f, g: lambda x: f(*g(*x)), functions, identity)
+def wrapper_id(*args, **kwargs):
+    return args, kwargs
+
+
+def compose(*wrappers):
+    def l(f, g):
+        def l2(*args, **kwargs):
+            a, kw = g(*args, **kwargs)
+            return f(*a, **kw)
+        return l2
+
+    return reduce(l, wrappers, wrapper_id)
 
 
 def concat_(seqs):
