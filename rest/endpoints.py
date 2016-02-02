@@ -168,10 +168,12 @@ def default_config(models, db_session=None):
 def create_api(root_model, db_session, app,
                config_decorator=identity,
                graph_decorator=identity,
-               endpoints_decorator=identity):
+               endpoints_decorator=identity,
+               paths_decorator=identity):
     graph = graph_decorator(create_graph(root_model))
     config = config_decorator(default_config(graph.nodes(), db_session))
-    all_ps = tuple(reversed(tuple(all_paths(graph, root_model))))
+    ps = paths_decorator(all_paths(graph, root_model))
+    all_ps = tuple(reversed(tuple(ps)))
     params = [endpoints_for_path((None,) + path, config, db_session, graph)
               for path in all_ps]
 
