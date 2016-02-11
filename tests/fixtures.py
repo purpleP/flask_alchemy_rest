@@ -209,6 +209,16 @@ def l3_empty(s):
     return s
 
 
+def hundred_roots_elements(s):
+    root, l1, l2, l3 = data()
+    l1.level2s.append(l2)
+    root.level1s.append(l1)
+    s.add(root)
+    l3s = [Level3(name='foo' + str(i)) for i in range(100)]
+    l2.level3s.extend(l3s)
+    return s
+
+
 def l3_non_empty(s):
     root, l1, l2, l3 = data()
     l1.level2s.append(l2)

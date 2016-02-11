@@ -18,9 +18,8 @@ def get_collection(db_session, query, serializer, *keys, **kwargs):
     scq = spec(cq)
     if page_num is not None and page_size is not None:
         count = scq.count()
-        page_count = count / page_size
-        offset = page_count * page_num
-        limit = offset + page_size
+        offset = (page_num - 1) * page_size
+        limit = page_size
         q = scq.offset(offset).limit(limit)
         items = q.all()
         output = serializer(items)

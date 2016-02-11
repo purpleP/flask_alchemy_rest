@@ -4,18 +4,45 @@ from functools import partial
 
 import pytest
 from flask import Flask
-from rest.handlers import create_schema, get_item, \
-     serialize_item, get_handler, \
-     get_collection, serialize_collection, \
-     delete_item, create_handler, delete_many_to_many, \
-     post_item, root_adder, deserialize_item, non_root_adder, \
-     post_item_many_to_many, patch_item, data_handler
-from rest.query import query, filter_
-from tests.fixtures import Level3, level3_item_rule, \
-     level3_collection_rule, Child, Parent, session, \
-     query_modifiers, l3_empty, l3_non_empty, parent_child, parent_with_child, \
-     search_session, child_collection_query_modifiers, Root, l0_empty, Level2
-from tests.flask_test_helpers import post_json, patch
+from rest.handlers import (
+    create_handler,
+    create_schema,
+    data_handler,
+    delete_item,
+    delete_many_to_many,
+    deserialize_item,
+    get_collection,
+    get_handler,
+    get_item,
+    non_root_adder,
+    patch_item,
+    post_item,
+    post_item_many_to_many,
+    root_adder,
+    serialize_collection,
+    serialize_item,
+)
+from rest.query import filter_, query
+from tests.fixtures import (
+    Child,
+    Level2,
+    Level3,
+    Parent,
+    Root,
+    child_collection_query_modifiers,
+    l0_empty,
+    l3_empty,
+    hundred_roots_elements,
+    l3_non_empty,
+    level3_collection_rule,
+    level3_item_rule,
+    parent_child,
+    parent_with_child,
+    query_modifiers,
+    search_session,
+    session,
+)
+from tests.flask_test_helpers import patch, post_json
 
 
 def by_name_spec(name, query):
@@ -65,7 +92,8 @@ class ParamsFactory(object):
         )
 
 
-l3_query = partial(query, model_to_query=Level3, query_modifiers=query_modifiers()[Level3])
+l3_query = partial(query, model_to_query=Level3,
+                   query_modifiers=query_modifiers()[Level3])
 
 child_query = partial(
     query,
@@ -167,10 +195,28 @@ class BasicCollectionParams(BasicGetParams):
 
 class GetCollectionEmptyParams(BasicCollectionParams):
     def __init__(self):
-        session_modifier = l3_empty
-        correct_data = {'items': []}
-        super(GetCollectionEmptyParams, self).__init__(session_modifier,
-                                                       correct_data)
+        super(GetCollectionEmptyParams, self).__init__(
+            session_modifier=l3_empty,
+            correct_data={'items': []}
+        )
+
+
+class GetCollectionCursoredParams(BasicCollectionParams):
+    def __init__(self):
+        super(GetCollectionCursoredParams, self).__init__(
+            session_modifier=hundred_roots_elements,
+            correct_data={
+                'items': [
+                    {'name': 'foo10'},
+                    {'name': 'foo11'},
+                ],
+                'count': 2,
+                'total': 100
+
+            }
+        )
+        r = partial(self.c.get, query_string={'size': 2, 'page': 6})
+        self.ps = self.ps._replace(request=r)
 
 
 class GetCollectionNonEmptyParams(BasicCollectionParams):
@@ -252,7 +298,8 @@ class NonEmptyItemParams(BasicItemParams):
     EmptyItemParams().ps,
     NonEmptyItemParams().ps,
     EmptyChildCollectionParams().ps,
-    NonEmptyChildCollectionParams().ps
+    NonEmptyChildCollectionParams().ps,
+    GetCollectionCursoredParams().ps,
 ])
 def test_get(r, url, status_code, correct_data):
     response = r(url)
