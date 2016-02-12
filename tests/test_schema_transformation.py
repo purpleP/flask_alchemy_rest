@@ -1,6 +1,6 @@
 import pytest
 from marshmallow import Schema
-from marshmallow.fields import String, Number, Nested
+from marshmallow.fields import String, Number, Integer, Nested
 from marshmallow.validate import Length, Range
 from rest.schema import to_jsonschema
 
@@ -44,6 +44,17 @@ class LimitedStringParam(StringParam):
         return parent_schema
 
 
+class StringEnumSchema(Schema):
+    name = String(choices=('one', 'two'))
+
+
+class StringEnumParam(String):
+    def add_properties(self, schema):
+        parent_schema = super(LimitedStringParam, self).add_properties(schema)
+        parent_schema['properties']['name']['enum'] = ('one', 'two')
+        return parent_schema
+
+
 class NumberSchema(Schema):
     order = Number()
 
@@ -56,6 +67,18 @@ class NumberParam(BasicTestParam):
         return schema
 
 
+class IntegerSchema(Schema):
+    order = Integer()
+
+
+class IntegerParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['order'] = {
+            'type': 'integer'
+        }
+        return schema
+
+
 class LimitedNumberSchema(Schema):
     order = Number(validate=Range(min=5, max=10))
 
@@ -63,6 +86,18 @@ class LimitedNumberSchema(Schema):
 class LimitedNumberParam(NumberParam):
     def add_properties(self, schema):
         parent_schema = super(LimitedNumberParam, self).add_properties(schema)
+        parent_schema['properties']['order']['minimum'] = 5
+        parent_schema['properties']['order']['maximum'] = 10
+        return parent_schema
+
+
+class LimitedIntegerSchema(Schema):
+    order = Integer(validate=Range(min=5, max=10))
+
+
+class LimitedIntegerParam(IntegerParam):
+    def add_properties(self, schema):
+        parent_schema = super(LimitedIntegerParam, self).add_properties(schema)
         parent_schema['properties']['order']['minimum'] = 5
         parent_schema['properties']['order']['maximum'] = 10
         return parent_schema
@@ -86,8 +121,11 @@ class NestedParam(BasicTestParam):
 @pytest.mark.parametrize('mschema,param', [
     (StringSchema(), StringParam()),
     (LimitedStringSchema(), LimitedStringParam()),
+    (StringEnumSchema(), StringParam()),
     (NumberSchema(), NumberParam()),
     (LimitedNumberSchema(), LimitedNumberParam()),
+    (IntegerSchema(), IntegerParam()),
+    (LimitedIntegerSchema(), LimitedIntegerParam()),
     (NestedSchema(), NestedParam()),
 ])
 def test_schema_transformation(mschema, param):

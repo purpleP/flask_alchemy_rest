@@ -1,4 +1,4 @@
-from marshmallow.fields import String, Number, Nested
+from marshmallow.fields import String, Number, Integer, Nested
 from marshmallow.validate import Length, Range
 
 
@@ -14,15 +14,15 @@ def to_jsonschema_field(current_schema, field):
     name = field.name
     if field.required:
         current_schema['required'].append(name)
-    transformer = transformers[field.__class__]
-    data = {name: transformer(field)}
-    current_schema['properties'].update(data)
+    property_dict = {}
+    property_dict['type'] = type_mapping[field.__class__]
+    property_dict.update(property_mapping[field.__class__](field))
+    current_schema['properties'].update({name: property_dict})
     return current_schema
 
 
 def string(field):
-    assert isinstance(field, String)
-    data = {'type': 'string'}
+    data = {}
     for v in field.validators:
         if isinstance(v, Length):
             if v.min:
@@ -37,24 +37,30 @@ def string(field):
 
 
 def number(field):
-    assert isinstance(field, Number)
-    data = {'type': 'number'}
+    property_dict = {}
     for v in field.validators:
         if isinstance(v, Range):
             if v.min:
-                data['minimum'] = v.min
+                property_dict['minimum'] = v.min
             if v.max:
-                data['maximum'] = v.max
-    return data
+                property_dict['maximum'] = v.max
+    return property_dict
 
 
 def nested(field):
-    assert isinstance(field, Nested)
     return to_jsonschema(field.schema)
 
 
-transformers = {
+type_mapping = {
+    String: 'string',
+    Number: 'number',
+    Integer: 'integer',
+    Nested: 'object',
+}
+
+property_mapping = {
     String: string,
     Number: number,
+    Integer: number,
     Nested: nested,
 }
