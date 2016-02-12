@@ -38,7 +38,7 @@ def string(field):
 
 def number(field):
     assert isinstance(field, Number)
-    data = [('type', 'number')]
+    data = {'type': 'number'}
     for v in field.validators:
         if isinstance(v, Range):
             if v.min:

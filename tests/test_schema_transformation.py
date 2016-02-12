@@ -1,51 +1,79 @@
 import pytest
 from marshmallow import Schema
 from marshmallow.fields import String, Number
-from marshmallow.validate import Length
+from marshmallow.validate import Length, Range
 from rest.schema import to_jsonschema
 
 
-class BasicTestSchema(Schema):
-    basic_jsonschema = {
-        'type': 'object',
-        'properties': {}
-    }
-
-    @classmethod
-    def add_properties(cls, schema):
-        pass
-
-    @classmethod
-    def correct_jsonschema(cls):
-        return cls.add_properties(cls.basic_jsonschema)
-
-
-class UnlimitedStringSchema(BasicTestSchema):
+class StringSchema(Schema):
     name = String()
 
-    @classmethod
-    def add_properties(cls, schema):
+
+class LimitedStringSchema(Schema):
+    name = String(validate=Length(min=5, max=10))
+
+
+class NumberSchema(Schema):
+    order = Number()
+
+
+class LimitedNumberSchema(Schema):
+    order = Number(validate=Range(min=5, max=10))
+
+
+class BasicTestParam(object):
+    def __init__(self):
+        self.basic_jsonschema = {
+            'type': 'object',
+            'properties': {}
+        }
+
+    def add_properties(self, schema):
+        return schema
+
+    @property
+    def correct_jsonschema(self):
+        return self.add_properties(self.basic_jsonschema)
+
+
+class StringParam(BasicTestParam):
+    def add_properties(self, schema):
         schema['properties']['name'] = {
             'type': 'string'
         }
         return schema
 
 
-class LimitedStringSchema(UnlimitedStringSchema):
-    name = String(validate=Length(min=5, max=10))
-
-    @classmethod
-    def add_properties(cls, schema):
-        parent_schema = super(LimitedStringSchema, cls).add_properties(schema)
+class LimitedStringParam(StringParam):
+    def add_properties(self, schema):
+        parent_schema = super(LimitedStringParam, self).add_properties(schema)
         parent_schema['properties']['name']['minLength'] = 5
         parent_schema['properties']['name']['maxLength'] = 10
         return parent_schema
 
 
-@pytest.mark.parametrize('schema', [
-    UnlimitedStringSchema(),
-    LimitedStringSchema(),
+class NumberParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['order'] = {
+            'type': 'number'
+        }
+        return schema
+
+
+class LimitedNumberParam(NumberParam):
+    def add_properties(self, schema):
+        parent_schema = super(LimitedNumberParam, self).add_properties(schema)
+        parent_schema['properties']['order']['minimum'] = 5
+        parent_schema['properties']['order']['maximum'] = 10
+        return parent_schema
+
+
+@pytest.mark.parametrize('mschema,param', [
+    (StringSchema(), StringParam()),
+    (LimitedStringSchema(), LimitedStringParam()),
+    (NumberSchema(), NumberParam()),
+    (LimitedNumberSchema(), LimitedNumberParam()),
 ])
-def test_schema_transformation(schema):
-    jschema = to_jsonschema(schema)
-    assert jschema == schema.correct_jsonschema()
+def test_schema_transformation(mschema, param):
+    jschema = to_jsonschema(mschema)
+    assert jschema == param.correct_jsonschema
