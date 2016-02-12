@@ -1,5 +1,5 @@
-from marshmallow.fields import String, Number, Integer, Nested
-from marshmallow.validate import Length, Range
+from marshmallow.fields import String, Number, Integer, Boolean, Nested
+from marshmallow.validate import Length, Range, OneOf
 
 
 def to_jsonschema(mschema):
@@ -33,6 +33,8 @@ def string(field):
                 if v.equal:
                     data['minLength'] = v.equal
                     data['maxLength'] = v.equal
+        if isinstance(v, OneOf):
+            data['enum'] = v.choices
     return data
 
 
@@ -47,6 +49,10 @@ def number(field):
     return property_dict
 
 
+def boolean(field):
+    return {}
+
+
 def nested(field):
     return to_jsonschema(field.schema)
 
@@ -56,6 +62,7 @@ type_mapping = {
     Number: 'number',
     Integer: 'integer',
     Nested: 'object',
+    Boolean: 'boolean',
 }
 
 property_mapping = {
@@ -63,4 +70,5 @@ property_mapping = {
     Number: number,
     Integer: number,
     Nested: nested,
+    Boolean: boolean,
 }

@@ -1,6 +1,6 @@
 import pytest
 from marshmallow import Schema
-from marshmallow.fields import String, Number, Integer, Nested
+from marshmallow.fields import String, Number, Integer, Boolean, Nested
 from marshmallow.validate import Length, Range
 from rest.schema import to_jsonschema
 
@@ -103,6 +103,18 @@ class LimitedIntegerParam(IntegerParam):
         return parent_schema
 
 
+class BooleanSchema(Schema):
+    is_important = Boolean()
+
+
+class BooleanParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['is_important'] = {
+            'type': 'boolean'
+        }
+        return schema
+
+
 class NestedSchema(Schema):
     order_info = Nested(StringSchema)
 
@@ -126,6 +138,7 @@ class NestedParam(BasicTestParam):
     (LimitedNumberSchema(), LimitedNumberParam()),
     (IntegerSchema(), IntegerParam()),
     (LimitedIntegerSchema(), LimitedIntegerParam()),
+    (BooleanSchema(), BooleanParam()),
     (NestedSchema(), NestedParam()),
 ])
 def test_schema_transformation(mschema, param):
