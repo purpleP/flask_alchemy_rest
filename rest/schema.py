@@ -1,4 +1,4 @@
-from marshmallow.fields import String, Number
+from marshmallow.fields import String, Number, Nested
 from marshmallow.validate import Length, Range
 
 
@@ -48,7 +48,13 @@ def number(field):
     return data
 
 
+def nested(field):
+    assert isinstance(field, Nested)
+    return to_jsonschema(field.schema)
+
+
 transformers = {
     String: string,
     Number: number,
+    Nested: nested,
 }
