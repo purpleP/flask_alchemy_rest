@@ -1,4 +1,4 @@
-from marshmallow.fields import String, Number, Integer, Boolean, Nested
+from marshmallow.fields import String, Number, Integer, Boolean, Nested, List
 from marshmallow.validate import Length, Range, OneOf
 
 
@@ -53,6 +53,14 @@ def boolean(field):
     return {}
 
 
+def list_(field):
+    return {
+        'items': {
+            'type': type_mapping[field.container.__class__]
+        }
+    }
+
+
 def nested(field):
     return to_jsonschema(field.schema)
 
@@ -61,6 +69,7 @@ type_mapping = {
     String: 'string',
     Number: 'number',
     Integer: 'integer',
+    List: 'array',
     Nested: 'object',
     Boolean: 'boolean',
 }
@@ -69,6 +78,7 @@ property_mapping = {
     String: string,
     Number: number,
     Integer: number,
+    List: list_,
     Nested: nested,
     Boolean: boolean,
 }
