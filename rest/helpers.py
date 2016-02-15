@@ -34,3 +34,7 @@ def concat_(seqs):
 
 def apply_(f, *args, **kwargs):
     return f(*args, **kwargs)
+
+
+def find(predicate, iterable):
+    return next((x for x in iterable if predicate(x)), None)

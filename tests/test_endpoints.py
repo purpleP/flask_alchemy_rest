@@ -3,7 +3,7 @@ import json
 from flask import Flask
 from pytest import fixture
 from rest.endpoints import url_rules_for_path, default_config, create_api
-from rest.introspect import find
+from rest.helpers import find
 from tests.fixtures import Root, Level1, Level2, Level3, models_graphs, \
     Parent, Child, session, hierarchy_data
 from tests.flask_test_helpers import post_json, get_json, patch

@@ -8,11 +8,12 @@ from rest.handlers import get_item, post_item, \
     create_schema, post_item_many_to_many, delete_item, \
     create_handler, \
     data_handler, get_handler, delete_many_to_many, root_adder, \
-    patch_item
+    patch_item, schemas_handler
 from rest.helpers import identity
-from rest.hierarchy_traverser import all_paths, create_graph
+from rest.hierarchy_traverser import all_paths, create_graph, remove_duplicates
 from rest.introspect import pk_attr_name
 from rest.query import query, filter_, join
+from rest.schema import to_jsonschema
 
 EndpointParams = namedtuple('EndpointParams',
                             ['rule', 'endpoint', 'view_func', 'methods'])
@@ -45,6 +46,38 @@ def endpoints_params(endpoints):
         for eps in endpoints
         for j in eps.values()
         for method, rh in j.iteritems()]
+
+
+def hyper_schema_endpoint(paths, config, graph):
+    all_models = set(list(chain.from_iterable(paths)))
+    schemas = {m: to_jsonschema(config[m]['schema']) for m in all_models}
+    mrels = map(lambda p: zip(p, p[1:]), paths)
+    for m, s in schemas.iteritems():
+        links = reduce(
+            partial(make_link, graph),
+            [(m, rel) for mrel in mrels for model, rel in mrel if model == m],
+            []
+        )
+        s['links'] = links
+    schemas = {str(m): schema for m, schema in schemas.iteritems()}
+    return EndpointParams(
+        '/schemas',
+        'schemas',
+        partial(schemas_handler, schemas),
+        ['GET']
+    )
+
+
+def make_link(graph, links, model_relation):
+    model, relation = model_relation
+    links.append(
+        {
+            'rel': graph[model][relation]['rel_attr'],
+            'href': '/'.join(('', '{id}', graph[model][relation]['rel_attr']))
+
+        }
+    )
+    return links
 
 
 def create_query_modifiers(graph, config, ch_m, p_m):
@@ -172,8 +205,8 @@ def create_api(root_model, db_session, app,
                paths_decorator=identity):
     graph = graph_decorator(create_graph(root_model))
     config = config_decorator(default_config(graph.nodes(), db_session))
-    ps = paths_decorator(all_paths(graph, root_model))
-    all_ps = tuple(reversed(tuple(ps)))
+    ps = tuple(paths_decorator(all_paths(graph, root_model)))
+    all_ps = tuple(reversed(ps))
     params = [endpoints_for_path((None,) + path, config, db_session, graph)
               for path in all_ps]
 
@@ -184,6 +217,7 @@ def create_api(root_model, db_session, app,
     d = {m: map(partial(my_getitem, 1), params) for m, params in by_model}
     d = endpoints_decorator(d)
     eps = endpoints_params(chain.from_iterable(d.values()))
+    eps.append(hyper_schema_endpoint(ps, config, graph))
     register_handlers(app, eps)
 
 
@@ -211,6 +245,7 @@ def default_cfg_for_model(model, db_session):
     return {
         'url_name': model.__tablename__,
         'item_serializer': i_ser,
+        'schema': create_schema(model),
         'collection_serializer': col_ser,
         'item_deserializer': i_des,
         'exposed_attr': pk_attr_name(model)[0],

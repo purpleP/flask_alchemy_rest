@@ -1,23 +1,50 @@
-from marshmallow.fields import String, Number, Integer, Boolean, Nested, List
-from marshmallow.validate import Length, Range, OneOf
+from inspect import getmro
+
+from helpers import find
+from marshmallow.fields import (
+    Boolean,
+    DateTime,
+    LocalDateTime,
+    Time,
+    Date,
+    Integer,
+    List,
+    Nested,
+    Number,
+    String,
+    Email,
+)
+from marshmallow.validate import Length, OneOf, Range, Regexp
 
 
 def to_jsonschema(mschema):
     return reduce(
         to_jsonschema_field,
-        mschema.declared_fields.values(),
-        {'type': 'object', 'properties': {}}
+        mschema._declared_fields.items(),
+        {'type': 'object', 'properties': {}, 'required': []}
     )
 
 
-def to_jsonschema_field(current_schema, field):
-    name = field.name
-    if field.required:
-        current_schema['required'].append(name)
-    property_dict = {}
-    property_dict['type'] = type_mapping[field.__class__]
-    property_dict.update(property_mapping[field.__class__](field))
-    current_schema['properties'].update({name: property_dict})
+def to_jsonschema_field(current_schema, name_and_field):
+    attr_name, field = name_and_field
+    if field.__class__ in type_mapping:
+        if field.name:
+            name = field.name
+        else:
+            name = attr_name
+        if field.required:
+            current_schema['required'].append(name)
+        property_dict = {}
+        property_dict['type'] = type_mapping[field.__class__]
+        most_specific_mapped_class = find(
+            lambda c: c in property_mapping.keys(),
+            getmro(field.__class__)
+        )
+        if most_specific_mapped_class:
+            property_dict.update(
+                property_mapping[most_specific_mapped_class](field)
+            )
+            current_schema['properties'].update({name: property_dict})
     return current_schema
 
 
@@ -35,6 +62,9 @@ def string(field):
                     data['maxLength'] = v.equal
         if isinstance(v, OneOf):
             data['enum'] = v.choices
+        if isinstance(v, Regexp):
+            data['pattern'] = v.regex.pattern
+
     return data
 
 
@@ -54,11 +84,22 @@ def boolean(field):
 
 
 def list_(field):
-    return {
-        'items': {
-            'type': type_mapping[field.container.__class__]
+    if field.container.__class__ in type_mapping:
+        return {
+            'items': {
+                'type': type_mapping[field.container.__class__]
+            }
         }
-    }
+    else:
+        return {}
+
+
+def datetime_(field):
+    return {'format': 'date-time'}
+
+
+def email(field):
+    return {'format': 'email'}
 
 
 def nested(field):
@@ -70,8 +111,13 @@ type_mapping = {
     Number: 'number',
     Integer: 'integer',
     List: 'array',
+    DateTime: 'string',
+    LocalDateTime: 'string',
+    Time: 'string',
+    Date: 'string',
     Nested: 'object',
     Boolean: 'boolean',
+    Email: 'string',
 }
 
 property_mapping = {
@@ -79,6 +125,11 @@ property_mapping = {
     Number: number,
     Integer: number,
     List: list_,
+    DateTime: datetime_,
+    LocalDateTime: datetime_,
+    Time: datetime_,
+    Date: datetime_,
     Nested: nested,
     Boolean: boolean,
+    Email: email,
 }

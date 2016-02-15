@@ -103,6 +103,10 @@ def patch_item(db_session, query, *keys, **kwargs):
         return 'No such resource', 404
 
 
+def schemas_handler(schemas):
+    return jsonify(schemas)
+
+
 def keys_from_kwargs(**kwargs):
     return tuple((kwargs[key] for key in sorted(kwargs.keys(), reverse=True)))
 

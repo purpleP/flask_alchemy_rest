@@ -1,3 +1,4 @@
+from rest.helpers import find
 from sqlalchemy import inspect
 
 
@@ -18,5 +19,3 @@ def is_pk(attr_column):
     return find(lambda c: c.primary_key, col_prop.columns) is not None
 
 
-def find(predicate, iterable):
-    return next((x for x in iterable if predicate(x)), None)

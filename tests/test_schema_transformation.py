@@ -1,7 +1,19 @@
 import pytest
 from marshmallow import Schema
-from marshmallow.fields import String, Number, Integer, Boolean, Nested, List
-from marshmallow.validate import Length, Range
+from marshmallow.fields import (
+    Boolean,
+    DateTime,
+    LocalDateTime,
+    Time,
+    Date,
+    Integer,
+    List,
+    Nested,
+    Number,
+    String,
+    Email,
+)
+from marshmallow.validate import Length, Range, Regexp
 from rest.schema import to_jsonschema
 
 
@@ -9,7 +21,8 @@ class BasicTestParam(object):
     def __init__(self):
         self.basic_jsonschema = {
             'type': 'object',
-            'properties': {}
+            'properties': {},
+            'required': []
         }
 
     def add_properties(self, schema):
@@ -41,6 +54,17 @@ class LimitedStringParam(StringParam):
         parent_schema = super(LimitedStringParam, self).add_properties(schema)
         parent_schema['properties']['name']['minLength'] = 5
         parent_schema['properties']['name']['maxLength'] = 10
+        return parent_schema
+
+
+class RegexpStringSchema(Schema):
+    name = String(validate=Regexp('.'))
+
+
+class RegexpStringParam(StringParam):
+    def add_properties(self, schema):
+        parent_schema = super(RegexpStringParam, self).add_properties(schema)
+        parent_schema['properties']['name']['pattern'] = '.'
         return parent_schema
 
 
@@ -130,6 +154,71 @@ class ListParam(BasicTestParam):
         return schema
 
 
+class DateTimeSchema(Schema):
+    a_long_time_ago = DateTime()
+
+
+class DateTimeParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['a_long_time_ago'] = {
+            'type': 'string',
+            'format': 'date-time'
+        }
+        return schema
+
+
+class LocalDateTimeSchema(Schema):
+    a_long_time_ago = LocalDateTime()
+
+
+class LocalDateTimeParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['a_long_time_ago'] = {
+            'type': 'string',
+            'format': 'date-time'
+        }
+        return schema
+
+
+class DateSchema(Schema):
+    a_long_time_ago = Date()
+
+
+class DateParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['a_long_time_ago'] = {
+            'type': 'string',
+            'format': 'date-time'
+        }
+        return schema
+
+
+class TimeSchema(Schema):
+    a_long_time_ago = Time()
+
+
+class TimeParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['a_long_time_ago'] = {
+            'type': 'string',
+            'format': 'date-time'
+        }
+        return schema
+
+
+class EmailSchema(Schema):
+    email_address = Email()
+
+
+class EmailParam(BasicTestParam):
+    def add_properties(self, schema):
+        schema['properties']['email_address'] = {
+            'type': 'string',
+            'format': 'email'
+        }
+        return schema
+
+
 class NestedSchema(Schema):
     order_info = Nested(StringSchema)
 
@@ -156,6 +245,12 @@ class NestedParam(BasicTestParam):
     (BooleanSchema(), BooleanParam()),
     (NestedSchema(), NestedParam()),
     (ListSchema(), ListParam()),
+    (DateTimeSchema(), DateTimeParam()),
+    (LocalDateTimeSchema(), LocalDateTimeParam()),
+    (DateSchema(), DateParam()),
+    (TimeSchema(), TimeParam()),
+    (EmailSchema(), EmailParam()),
+    (RegexpStringSchema(), RegexpStringParam()),
 ])
 def test_schema_transformation(mschema, param):
     jschema = to_jsonschema(mschema)
