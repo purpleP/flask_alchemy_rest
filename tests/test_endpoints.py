@@ -2,7 +2,12 @@ import json
 
 from flask import Flask
 from pytest import fixture
-from rest.endpoints import url_rules_for_path, default_config, create_api
+from rest.endpoints import (
+    url_rules_for_path,
+    default_config,
+    create_api,
+    register_all_apis,
+)
 from rest.helpers import find
 from tests.fixtures import Root, Level1, Level2, Level3, models_graphs, \
     Parent, Child, session, hierarchy_data
@@ -18,9 +23,14 @@ def test_register_handlers(state):
     client = app.test_client()
     hierarchy, with_cycles = models_graphs()
 
-    create_api(Root, session, app)
-    create_api(Parent, session, app)
-    create_api(Child, session, app)
+    root_apis, from_root_schemas = create_api(Root, session)
+
+    parent_apis, from_parent_schemas = create_api(Parent, session)
+
+    child_apis, from_child_schemas = create_api(Child, session)
+    all_schemas = (from_root_schemas, from_parent_schemas, from_child_schemas)
+    all_apis = (root_apis, parent_apis, child_apis)
+    register_all_apis(app, all_schemas, all_apis)
 
     all_data_to_upload = hierarchy_data()
     check_endpoints(client, '', all_data_to_upload, config, hierarchy, Root)

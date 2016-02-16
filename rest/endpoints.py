@@ -1,19 +1,31 @@
-from collections import namedtuple, defaultdict
+from collections import defaultdict, namedtuple
 from functools import partial
 from itertools import chain, groupby
 
-from rest.handlers import get_item, post_item, \
-    get_collection, \
-    serialize_item, serialize_collection, deserialize_item, \
-    create_schema, post_item_many_to_many, delete_item, \
-    create_handler, \
-    data_handler, get_handler, delete_many_to_many, root_adder, \
-    patch_item, schemas_handler
+from rest.handlers import (
+    create_handler,
+    create_schema,
+    data_handler,
+    delete_item,
+    delete_many_to_many,
+    deserialize_item,
+    get_collection,
+    get_handler,
+    get_item,
+    patch_item,
+    post_item,
+    post_item_many_to_many,
+    root_adder,
+    schemas_handler,
+    serialize_collection,
+    serialize_item,
+)
 from rest.helpers import identity
-from rest.hierarchy_traverser import all_paths, create_graph, remove_duplicates
+from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
-from rest.query import query, filter_, join
+from rest.query import filter_, join, query
 from rest.schema import to_jsonschema
+
 
 EndpointParams = namedtuple('EndpointParams',
                             ['rule', 'endpoint', 'view_func', 'methods'])
@@ -43,12 +55,12 @@ def endpoints_params(endpoints):
         view_func=rh[1],
         methods=[method]
     )
-        for eps in endpoints
-        for j in eps.values()
-        for method, rh in j.iteritems()]
+            for eps in endpoints
+            for j in eps.values()
+            for method, rh in j.iteritems()]
 
 
-def hyper_schema_endpoint(paths, config, graph):
+def schemas_for_paths(paths, config, graph):
     all_models = set(list(chain.from_iterable(paths)))
     schemas = {m: to_jsonschema(config[m]['schema']) for m in all_models}
     mrels = map(lambda p: zip(p, p[1:]), paths)
@@ -56,16 +68,10 @@ def hyper_schema_endpoint(paths, config, graph):
         links = reduce(
             partial(make_link, graph),
             [(m, rel) for mrel in mrels for model, rel in mrel if model == m],
-            []
+            [],
         )
         s['links'] = links
-    schemas = {str(m): schema for m, schema in schemas.iteritems()}
-    return EndpointParams(
-        '/schemas',
-        'schemas',
-        partial(schemas_handler, schemas),
-        ['GET']
-    )
+    return schemas
 
 
 def make_link(graph, links, model_relation):
@@ -73,11 +79,30 @@ def make_link(graph, links, model_relation):
     links.append(
         {
             'rel': graph[model][relation]['rel_attr'],
-            'href': '/'.join(('', '{id}', graph[model][relation]['rel_attr']))
-
+            'href': '/'.join(('', '{id}', graph[model][relation]['rel_attr'])),
+            'schema_key': relation.__class__,
         }
     )
     return links
+
+
+def merge(schemas_acc, schemas2):
+    new_schemas = {m: schema for m, schema in schemas2.iteritems()
+                   if m not in schemas_acc}
+    duplicate_schemas = {m: schema for m, schema in schemas2.iteritems()
+                         if m in schemas_acc}
+    for m, schema in duplicate_schemas.iteritems():
+        l1 = schemas_acc[m]['links']
+        l2 = schema['links']
+        schemas_acc[m]['links'] = reduce(unique, l1 + l2, [])
+    schemas_acc.update(new_schemas)
+    return schemas_acc
+
+
+def unique(acc, item):
+    if item not in acc:
+        acc.append(item)
+    return acc
 
 
 def create_query_modifiers(graph, config, ch_m, p_m):
@@ -89,7 +114,7 @@ def create_query_modifiers(graph, config, ch_m, p_m):
         return im,
 
 
-def endpoints_for_path(path, config, db_session, graph):
+def apis_for_path(path, config, db_session, graph):
     col_rule, item_rule = url_rules_for_path(path[1:], config)
     model = path[-1]
     parent = path[-2]
@@ -98,80 +123,80 @@ def endpoints_for_path(path, config, db_session, graph):
     query_modifiers = tuple((create_query_modifiers(graph, config, ch_m, p_m)
                              for ch_m, p_m in zip(ps, ps[1:])))
     q = partial(
-            query,
-            model_to_query=model,
-            query_modifiers=query_modifiers,
+        query,
+        model_to_query=model,
+        query_modifiers=query_modifiers,
     )
     model_config = config[model]
     endpoints = defaultdict(dict)
     endpoints['collection']['GET'] = (
         col_rule, get_handler(
-                partial(
-                        get_collection,
-                        db_session,
-                        q,
-                        model_config['collection_serializer'],
-                ),
-                model_config.get('specs', {})
+            partial(
+                get_collection,
+                db_session,
+                q,
+                model_config['collection_serializer'],
+            ),
+            model_config.get('specs', {})
         )
     )
     h = partial(
-            post_item,
-            db_session,
-            model_config['exposed_attr'],
-            root_adder,
-            model_config['item_deserializer'],
+        post_item,
+        db_session,
+        model_config['exposed_attr'],
+        root_adder,
+        model_config['item_deserializer'],
     )
 
     del_h = partial(
-            delete_item,
-            db_session,
-            q,
+        delete_item,
+        db_session,
+        q,
     )
 
     if parent:
         rel_attr = graph[parent][model]['rel_attr']
         item_query = partial(
-                query,
-                model_to_query=model,
-                query_modifiers=(
-                    (
-                        partial(filter_, getattr(model,
-                                                 model_config[
-                                                     'exposed_attr'])),
-                    ),
-                )
+            query,
+            model_to_query=model,
+            query_modifiers=(
+                (
+                    partial(filter_, getattr(model,
+                                             model_config[
+                                                 'exposed_attr'])),
+                ),
+            )
         )
         parent_query = partial(
-                            query,
-                            model_to_query=parent,
-                            query_modifiers=query_modifiers[1:]
-                    )
+            query,
+            model_to_query=parent,
+            query_modifiers=query_modifiers[1:]
+        )
         if (model, parent) in graph.edges():
             h = partial(
-                    post_item_many_to_many,
-                    db_session,
-                    item_query,
-                    parent_query,
-                    rel_attr,
+                post_item_many_to_many,
+                db_session,
+                item_query,
+                parent_query,
+                rel_attr,
             )
             del_h = partial(
-                    delete_many_to_many,
-                    db_session,
-                    item_query,
-                    parent_query,
-                    rel_attr)
+                delete_many_to_many,
+                db_session,
+                item_query,
+                parent_query,
+                rel_attr)
     endpoints['collection']['POST'] = (
         col_rule, data_handler(h)
     )
     endpoints['item']['GET'] = (
         item_rule, create_handler(
-                partial(
-                        get_item,
-                        db_session,
-                        q,
-                        model_config['item_serializer']
-                )
+            partial(
+                get_item,
+                db_session,
+                q,
+                model_config['item_serializer']
+            )
         )
     )
     endpoints['item']['PATCH'] = (
@@ -198,27 +223,49 @@ def default_config(models, db_session=None):
     return {m: default_cfg_for_model(m, db_session) for m in models}
 
 
-def create_api(root_model, db_session, app,
+def register_all_apis(app, schemas, all_apis):
+    endpoints = chain.from_iterable(
+        (api.values() for api in all_apis)
+    )
+    eps = endpoints_params(chain.from_iterable(endpoints))
+    out_schemas = reduce(merge, schemas, {})
+    for schema in out_schemas.values():
+        for l in schema['links']:
+            l['schema_key'] = str(l['schema_key'])
+    eps.append(
+        EndpointParams(
+            rule='/schemas',
+            endpoint='schemas',
+            view_func=partial(
+                schemas_handler,
+                {str(m): schema for m, schema in out_schemas.iteritems()}
+            ),
+            methods=['GET']
+        )
+    )
+    register_handlers(app, eps)
+
+
+def create_api(root_model, db_session,
                config_decorator=identity,
                graph_decorator=identity,
-               endpoints_decorator=identity,
                paths_decorator=identity):
     graph = graph_decorator(create_graph(root_model))
     config = config_decorator(default_config(graph.nodes(), db_session))
     ps = tuple(paths_decorator(all_paths(graph, root_model)))
     all_ps = tuple(reversed(ps))
-    params = [endpoints_for_path((None,) + path, config, db_session, graph)
-              for path in all_ps]
+    apis = [apis_for_path((None,) + path, config, db_session, graph)
+            for path in all_ps]
 
     def key(x):
         return x[0]
-    sp = sorted(params, key=key)
+
+    sp = sorted(apis, key=key)
     by_model = groupby(sp, key=key)
-    d = {m: map(partial(my_getitem, 1), params) for m, params in by_model}
-    d = endpoints_decorator(d)
-    eps = endpoints_params(chain.from_iterable(d.values()))
-    eps.append(hyper_schema_endpoint(ps, config, graph))
-    register_handlers(app, eps)
+    apis_by_model = {m: map(partial(my_getitem, 1), params)
+                     for m, params in by_model}
+    schemas = schemas_for_paths(ps, config, graph)
+    return apis_by_model, schemas
 
 
 def my_getitem(index, list_):
@@ -241,7 +288,7 @@ def serializers_maker(model, schema_factory, db_session):
 
 def default_cfg_for_model(model, db_session):
     i_ser, col_ser, i_des = serializers_maker(
-            model, create_schema, db_session)
+        model, create_schema, db_session)
     return {
         'url_name': model.__tablename__,
         'item_serializer': i_ser,
@@ -256,9 +303,9 @@ def default_cfg_for_model(model, db_session):
 
 def url_rules_for_path(path, config):
     url_parts = [''] + list(chain(
-            *[[config[model]['url_name'],
-               '<{}level_{}_id>'.format(config[model]['exposed_attr_type'], i)]
-              for i, model in enumerate(path)]
+        *[[config[model]['url_name'],
+           '<{}level_{}_id>'.format(config[model]['exposed_attr_type'], i)]
+          for i, model in enumerate(path)]
     )
     )
     collection_resource_url = '/'.join(url_parts[:-1])
