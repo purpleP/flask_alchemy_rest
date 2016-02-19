@@ -2,16 +2,16 @@ import pytest
 from marshmallow import Schema
 from marshmallow.fields import (
     Boolean,
-    DateTime,
-    LocalDateTime,
-    Time,
     Date,
+    DateTime,
+    Email,
     Integer,
     List,
+    LocalDateTime,
     Nested,
     Number,
     String,
-    Email,
+    Time,
 )
 from marshmallow.validate import Length, Range, Regexp
 from rest.schema import to_jsonschema

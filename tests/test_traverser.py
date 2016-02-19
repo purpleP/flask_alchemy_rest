@@ -1,13 +1,11 @@
 from operator import eq
 
+import networkx as nx
 from networkx.algorithms.isomorphism.isomorph import is_isomorphic
 from pytest import fixture
-
-import networkx as nx
-
-from rest.hierarchy_traverser import create_graph, all_paths
 from rest.helpers import inits
-from tests.fixtures import Root, Parent, models_graphs
+from rest.hierarchy_traverser import all_paths, create_graph
+from tests.fixtures import Parent, Root, cyclic_graph, hierarchy_graph
 
 
 @fixture
@@ -40,8 +38,7 @@ def test_inits():
     assert inits(a) == correct_inits
 
 
-def test_create_hierarchy(models_graphs):
-    hierarchy_graph, cyclic_graph = models_graphs
+def test_create_hierarchy(cyclic_graph, hierarchy_graph):
     g = create_graph(Root)
     assert is_isomorphic(g, hierarchy_graph, node_match=eq, edge_match=eq)
     g = create_graph(Parent)

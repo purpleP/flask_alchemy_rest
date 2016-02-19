@@ -9,29 +9,30 @@ from rest.endpoints import (
     schemas_for_paths,
     url_rules_for_path,
 )
+from rest.handlers import create_schema
 from rest.helpers import find
+from rest.schema import to_jsonschema
 from tests.fixtures import (
     Child,
+    Grandchild,
     Level1,
     Level2,
     Level3,
     Parent,
-    Grandchild,
     Root,
+    h_data,
     hierarchy_data,
-    models_graphs,
+    cyclic_graph,
+    hierarchy_graph,
     session,
 )
-from rest.handlers import create_schema
 from tests.flask_test_helpers import get_json, patch, post_json
-from rest.schema import to_jsonschema
 
 
 path = [Root, Level1, Level2, Level3]
 
 
-def test_schemas_for_paths(models_graphs):
-    _, graph = models_graphs
+def test_schemas_for_paths(cyclic_graph):
     paths = (
         (Parent, Child),
         (Parent, Child, Grandchild),
@@ -78,7 +79,7 @@ def test_schemas_for_paths(models_graphs):
         Child: child_hyper_schema,
         Grandchild: grandchild_hyper_schema,
     }
-    schemas = schemas_for_paths(paths, config, graph)
+    schemas = schemas_for_paths(paths, config, cyclic_graph)
     x = {m: links_to_tuple(s) for m, s in correct_schemas.iteritems()}
     y = {m: links_to_tuple(s) for m, s in schemas.iteritems()}
     assert y == x
@@ -90,12 +91,11 @@ def links_to_tuple(schema):
     return new_schema
 
 
-def test_register_handlers(state):
+def test_register_handlers(state, hierarchy_graph, hierarchy_data):
     config, session = state
     app = Flask(__name__)
     app.debug = True
     client = app.test_client()
-    hierarchy, with_cycles = models_graphs()
 
     root_apis, from_root_schemas = create_api(Root, session)
 
@@ -106,8 +106,8 @@ def test_register_handlers(state):
     all_apis = (root_apis, parent_apis, child_apis)
     register_all_apis(app, all_schemas, all_apis)
 
-    all_data_to_upload = hierarchy_data()
-    check_endpoints(client, '', all_data_to_upload, config, hierarchy, Root)
+    check_endpoints(client, '', hierarchy_data,
+                    config, hierarchy_graph, Root)
     response = post_json(client, '/parents', {'name': 'Adam'})
     assert response.status_code == 200
     adam_id = json.loads(response.data)['id']

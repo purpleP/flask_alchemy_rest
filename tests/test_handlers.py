@@ -30,9 +30,9 @@ from tests.fixtures import (
     Parent,
     Root,
     child_collection_query_modifiers,
+    hundred_roots_elements,
     l0_empty,
     l3_empty,
-    hundred_roots_elements,
     l3_non_empty,
     level3_collection_rule,
     level3_item_rule,
@@ -394,7 +394,8 @@ def test_post_root(session):
 
 
 def test_post_non_root(session):
-    q = partial(query, model_to_query=Level2, query_modifiers=query_modifiers()[Level2])
+    q = partial(query, model_to_query=Level2,
+                query_modifiers=query_modifiers()[Level2])
     c = client(
             handler_maker=lambda s: data_handler(
                     partial(
@@ -481,6 +482,3 @@ def test_patch(session):
     assert len(l3s) == 0
     l3s = session.query(Level3).filter_by(name='l3_new_name').all()
     assert len(l3s) == 1
-
-
-

@@ -1,7 +1,7 @@
 from rest.introspect import pk_attr_name, related_models
-from sqlalchemy.orm.base import ONETOMANY, MANYTOMANY
+from sqlalchemy.orm.base import MANYTOMANY, ONETOMANY
 from sqlalchemy.util import symbol
-from tests.fixtures import Root, Level1, Child, Parent, Grandchild
+from tests.fixtures import Child, Grandchild, Level1, Parent, Root
 
 
 def test_pk_name_for_model():

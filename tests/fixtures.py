@@ -4,13 +4,19 @@ import networkx as nx
 from pytest import fixture
 from rest.helpers import tails
 from rest.query import filter_, join
-
-from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, \
-    Table
+from sqlalchemy import (
+    Column,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    create_engine
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
-from sqlalchemy.orm.base import ONETOMANY, MANYTOMANY
+from sqlalchemy.orm.base import MANYTOMANY, ONETOMANY
 from sqlalchemy.pool import StaticPool
+
 
 ModelBase = declarative_base()
 
@@ -115,24 +121,27 @@ def session():
 
 
 @fixture()
-def state():
-    _session = session()
+def h_data():
     root = Root(name='root')
     l1 = Level1(name='level1')
-    level2, level3 = items()
-    l1.level2s.append(level2)
-    root.level1s.append(l1)
-    _session.add(root)
-    _session.commit()
-    return _session, ([level3], [level2], [l1], [root])
+    l2 = Level2(name='level2')
+    l3 = Level3(name='level3')
+    return root, l1, l2, l3
 
 
-def hierarchy_data():
-    root = Root(name='root')
-    l1 = Level1(name='level1')
-    l2 = Level2(name=u'level2')
-    l3 = Level3(name=u'level3')
-    return [root], [l1], [l2], [l3]
+@fixture()
+def state(h_data, session):
+    session.add(h_data[0])
+    h_data[0].level1s.append(h_data[1])
+    h_data[1].level2s.append(h_data[2])
+    h_data[2].level3s.append(h_data[3])
+    session.commit()
+    return session, list(reversed(hierarchy_data(h_data)))
+
+
+@fixture()
+def hierarchy_data(h_data):
+    return [[x] for x in h_data]
 
 
 def cycled_data():
@@ -178,19 +187,24 @@ def query_modifiers():
 
 
 @fixture()
-def models_graphs():
-    hierarchy = nx.DiGraph()
-    hierarchy.add_edge(Root, Level1, rel_attr='level1s', rel_type=ONETOMANY)
-    hierarchy.add_edge(Level1, Level2, rel_attr='level2s', rel_type=ONETOMANY)
-    hierarchy.add_edge(Level2, Level3, rel_attr='level3s', rel_type=ONETOMANY)
-    cyclic = nx.DiGraph()
-    cyclic.add_edge(Parent, Child, rel_attr='children', rel_type=MANYTOMANY)
-    cyclic.add_edge(Child, Parent, rel_attr='parents', rel_type=MANYTOMANY)
-    cyclic.add_edge(Child, Grandchild,
-                    rel_attr='grandchildren', rel_type=ONETOMANY)
-    return hierarchy, cyclic
+def hierarchy_graph():
+    g = nx.DiGraph()
+    g.add_edge(Root, Level1, rel_attr='level1s', rel_type=ONETOMANY)
+    g.add_edge(Level1, Level2, rel_attr='level2s', rel_type=ONETOMANY)
+    g.add_edge(Level2, Level3, rel_attr='level3s', rel_type=ONETOMANY)
+    return g
 
 
+@fixture()
+def cyclic_graph():
+    g = nx.DiGraph()
+    g.add_edge(Parent, Child, rel_attr='children', rel_type=MANYTOMANY)
+    g.add_edge(Child, Parent, rel_attr='parents', rel_type=MANYTOMANY)
+    g.add_edge(Child, Grandchild, rel_attr='grandchildren', rel_type=ONETOMANY)
+    return g
+
+
+@fixture
 def data():
     root = Root(name='root1')
     l1 = Level1(name='level1_1')

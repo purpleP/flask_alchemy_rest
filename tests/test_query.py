@@ -2,8 +2,16 @@ from functools import partial
 
 from rest.helpers import tails
 from rest.query import query, zip_
-from tests.fixtures import Child, full_path, query_modifiers, \
-    parent_with_child, child_collection_query_modifiers, session, state
+from tests.fixtures import (
+    Child,
+    child_collection_query_modifiers,
+    full_path,
+    parent_with_child,
+    query_modifiers,
+    session,
+    h_data,
+    state,
+)
 
 
 def test_query(state):
