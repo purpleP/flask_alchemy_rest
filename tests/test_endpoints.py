@@ -3,17 +3,91 @@ import json
 from flask import Flask
 from pytest import fixture
 from rest.endpoints import (
-    url_rules_for_path,
-    default_config,
     create_api,
+    default_config,
     register_all_apis,
+    schemas_for_paths,
+    url_rules_for_path,
 )
 from rest.helpers import find
-from tests.fixtures import Root, Level1, Level2, Level3, models_graphs, \
-    Parent, Child, session, hierarchy_data
-from tests.flask_test_helpers import post_json, get_json, patch
+from tests.fixtures import (
+    Child,
+    Level1,
+    Level2,
+    Level3,
+    Parent,
+    Grandchild,
+    Root,
+    hierarchy_data,
+    models_graphs,
+    session,
+)
+from rest.handlers import create_schema
+from tests.flask_test_helpers import get_json, patch, post_json
+from rest.schema import to_jsonschema
+
 
 path = [Root, Level1, Level2, Level3]
+
+
+def test_schemas_for_paths(models_graphs):
+    _, graph = models_graphs
+    paths = (
+        (Parent, Child),
+        (Parent, Child, Grandchild),
+        (Child, Parent),
+        (Child, Grandchild),
+    )
+    config = {
+        Parent: {
+            'schema': create_schema(Parent, {'exclude': ('children',)})()
+        },
+        Child: {
+            'schema': create_schema(
+                Child,
+                {'exclude': ('parents', 'grandchildren')}
+            )()
+        },
+        Grandchild: {
+            'schema': create_schema(Grandchild)()
+        }
+    }
+    parent_hyper_schema = to_jsonschema(config[Parent]['schema'])
+    child_hyper_schema = to_jsonschema(config[Child]['schema'])
+    grandchild_hyper_schema = to_jsonschema(config[Grandchild]['schema'])
+    parent_hyper_schema['links'] = [{
+        'rel': 'children',
+        'href': '/{id}/children',
+        'schema_key': Child,
+    }]
+    child_hyper_schema['links'] = [
+        {
+            'rel': 'parents',
+            'href': '/{id}/parents',
+            'schema_key': Parent,
+        },
+        {
+            'rel': 'grandchildren',
+            'href': '/{id}/grandchildren',
+            'schema_key': Grandchild,
+        },
+    ]
+    grandchild_hyper_schema['links'] = []
+    correct_schemas = {
+        Parent: parent_hyper_schema,
+        Child: child_hyper_schema,
+        Grandchild: grandchild_hyper_schema,
+    }
+    schemas = schemas_for_paths(paths, config, graph)
+    x = {m: links_to_tuple(s) for m, s in correct_schemas.iteritems()}
+    y = {m: links_to_tuple(s) for m, s in schemas.iteritems()}
+    assert y == x
+
+
+def links_to_tuple(schema):
+    new_schema = dict(schema)
+    new_schema['links'] = set([tuple(l.items()) for l in schema['links']])
+    return new_schema
 
 
 def test_register_handlers(state):
@@ -117,11 +191,6 @@ def check_collection_is_empty(client, url):
     assert response.status_code == 200
     assert 'items' in response.data
     assert len(json.loads(response.data)['items']) == 0
-
-
-def test_default_config(config):
-    pass
-    # assert config == default_config(path)
 
 
 def test_url_for_path(config):

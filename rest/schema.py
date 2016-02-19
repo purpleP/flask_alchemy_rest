@@ -34,8 +34,7 @@ def to_jsonschema_field(current_schema, name_and_field):
             name = attr_name
         if field.required:
             current_schema['required'].append(name)
-        property_dict = {}
-        property_dict['type'] = type_mapping[field.__class__]
+        property_dict = {'type': type_mapping[field.__class__]}
         most_specific_mapped_class = find(
             lambda c: c in property_mapping.keys(),
             getmro(field.__class__)

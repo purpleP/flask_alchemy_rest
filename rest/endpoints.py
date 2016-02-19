@@ -1,6 +1,6 @@
 from collections import defaultdict, namedtuple
-from functools import partial
-from itertools import chain, groupby
+from functools import partial, reduce
+from itertools import chain
 
 from rest.handlers import (
     create_handler,
@@ -16,15 +16,17 @@ from rest.handlers import (
     post_item,
     post_item_many_to_many,
     root_adder,
+    non_root_adder,
     schemas_handler,
     serialize_collection,
     serialize_item,
 )
-from rest.helpers import identity
+from rest.helpers import identity, list_dict, merge
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
 from rest.query import filter_, join, query
 from rest.schema import to_jsonschema
+from sqlalchemy.orm.base import MANYTOMANY
 
 
 EndpointParams = namedtuple('EndpointParams',
@@ -63,65 +65,60 @@ def endpoints_params(endpoints):
 def schemas_for_paths(paths, config, graph):
     all_models = set(list(chain.from_iterable(paths)))
     schemas = {m: to_jsonschema(config[m]['schema']) for m in all_models}
-    mrels = map(lambda p: zip(p, p[1:]), paths)
+    model_relation_pairs = chain.from_iterable([zip(p, p[1:]) for p in paths])
+    by_model = list_dict(model_relation_pairs)
+
     for m, s in schemas.iteritems():
-        links = reduce(
-            partial(make_link, graph),
-            [(m, rel) for mrel in mrels for model, rel in mrel if model == m],
-            [],
+        s['links'] = reduce(
+            partial(
+                make_link,
+                graph,
+                m
+            ),
+            list(set(by_model[m])),
+            []
         )
-        s['links'] = links
     return schemas
 
 
-def make_link(graph, links, model_relation):
-    model, relation = model_relation
+def make_link(graph, model, links, relation):
     links.append(
         {
             'rel': graph[model][relation]['rel_attr'],
             'href': '/'.join(('', '{id}', graph[model][relation]['rel_attr'])),
-            'schema_key': relation.__class__,
+            'schema_key': relation,
         }
     )
     return links
 
 
-def merge(schemas_acc, schemas2):
-    new_schemas = {m: schema for m, schema in schemas2.iteritems()
-                   if m not in schemas_acc}
-    duplicate_schemas = {m: schema for m, schema in schemas2.iteritems()
-                         if m in schemas_acc}
-    for m, schema in duplicate_schemas.iteritems():
-        l1 = schemas_acc[m]['links']
-        l2 = schema['links']
-        schemas_acc[m]['links'] = reduce(unique, l1 + l2, [])
-    schemas_acc.update(new_schemas)
-    return schemas_acc
-
-
-def unique(acc, item):
-    if item not in acc:
-        acc.append(item)
-    return acc
+def is_many_to_many(graph, model, parent):
+    return ((model, parent) in graph.edges() and
+            graph[model][parent]['rel_type'] == MANYTOMANY)
 
 
 def create_query_modifiers(graph, config, ch_m, p_m):
     im = partial(filter_, getattr(ch_m, config[ch_m]['exposed_attr']))
-    if (ch_m, p_m) in graph.edges():
+    if is_many_to_many(graph, ch_m, p_m):
         jm = partial(join, p_m, graph[ch_m][p_m]['rel_attr'])
         return im, jm
     else:
         return im,
 
 
+def query_modifiers_for_path(graph, config, path):
+    return tuple((create_query_modifiers(graph, config, ch_m, p_m)
+                  for ch_m, p_m in zip(path, path[1:])))
+
+
 def apis_for_path(path, config, db_session, graph):
+
     col_rule, item_rule = url_rules_for_path(path[1:], config)
     model = path[-1]
     parent = path[-2]
 
     ps = list(reversed(path))
-    query_modifiers = tuple((create_query_modifiers(graph, config, ch_m, p_m)
-                             for ch_m, p_m in zip(ps, ps[1:])))
+    query_modifiers = query_modifiers_for_path(graph, config, ps)
     q = partial(
         query,
         model_to_query=model,
@@ -172,7 +169,7 @@ def apis_for_path(path, config, db_session, graph):
             model_to_query=parent,
             query_modifiers=query_modifiers[1:]
         )
-        if (model, parent) in graph.edges():
+        if is_many_to_many(graph, model, parent):
             h = partial(
                 post_item_many_to_many,
                 db_session,
@@ -186,6 +183,18 @@ def apis_for_path(path, config, db_session, graph):
                 item_query,
                 parent_query,
                 rel_attr)
+        else:
+            h = partial(
+                post_item,
+                db_session,
+                model_config['exposed_attr'],
+                partial(
+                    non_root_adder,
+                    parent_query,
+                    rel_attr,
+                ),
+                model_config['item_deserializer'],
+            )
     endpoints['collection']['POST'] = (
         col_rule, data_handler(h)
     )
@@ -256,14 +265,7 @@ def create_api(root_model, db_session,
     all_ps = tuple(reversed(ps))
     apis = [apis_for_path((None,) + path, config, db_session, graph)
             for path in all_ps]
-
-    def key(x):
-        return x[0]
-
-    sp = sorted(apis, key=key)
-    by_model = groupby(sp, key=key)
-    apis_by_model = {m: map(partial(my_getitem, 1), params)
-                     for m, params in by_model}
+    apis_by_model = list_dict(apis)
     schemas = schemas_for_paths(ps, config, graph)
     return apis_by_model, schemas
 

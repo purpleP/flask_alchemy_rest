@@ -9,6 +9,7 @@ from sqlalchemy import Column, String, ForeignKey, create_engine, Integer, \
     Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm.base import ONETOMANY, MANYTOMANY
 from sqlalchemy.pool import StaticPool
 
 ModelBase = declarative_base()
@@ -68,7 +69,7 @@ class Child(ModelBase):
             "Parent",
             secondary=association_table,
             back_populates="children")
-    grandchildrens = relationship('Grandchild')
+    grandchildren = relationship('Grandchild')
 
 
 class Grandchild(ModelBase):
@@ -179,13 +180,14 @@ def query_modifiers():
 @fixture()
 def models_graphs():
     hierarchy = nx.DiGraph()
-    hierarchy.add_edge(Root, Level1, rel_attr='level1s')
-    hierarchy.add_edge(Level1, Level2, rel_attr='level2s')
-    hierarchy.add_edge(Level2, Level3, rel_attr='level3s')
+    hierarchy.add_edge(Root, Level1, rel_attr='level1s', rel_type=ONETOMANY)
+    hierarchy.add_edge(Level1, Level2, rel_attr='level2s', rel_type=ONETOMANY)
+    hierarchy.add_edge(Level2, Level3, rel_attr='level3s', rel_type=ONETOMANY)
     cyclic = nx.DiGraph()
-    cyclic.add_edge(Parent, Child, rel_attr='children')
-    cyclic.add_edge(Child, Parent, rel_attr='parents')
-    cyclic.add_edge(Child, Grandchild, rel_attr='grandchildrens')
+    cyclic.add_edge(Parent, Child, rel_attr='children', rel_type=MANYTOMANY)
+    cyclic.add_edge(Child, Parent, rel_attr='parents', rel_type=MANYTOMANY)
+    cyclic.add_edge(Child, Grandchild,
+                    rel_attr='grandchildren', rel_type=ONETOMANY)
     return hierarchy, cyclic
 
 

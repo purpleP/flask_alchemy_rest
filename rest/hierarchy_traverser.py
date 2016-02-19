@@ -14,8 +14,13 @@ def create_graph(root_model):
 
 
 def add_model(graph, model):
-    for m, rel_attr in related_models(model).iteritems():
-        graph.add_edge(model, m, rel_attr=rel_attr)
+    for m, rel_info in related_models(model).iteritems():
+        graph.add_edge(
+            model,
+            m,
+            rel_attr=rel_info.attr,
+            rel_type=rel_info.direction
+        )
         if (m, model) not in graph.edges():
             add_model(graph, m)
 

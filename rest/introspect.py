@@ -1,10 +1,15 @@
 from rest.helpers import find
 from sqlalchemy import inspect
+from collections import namedtuple
+
+
+RelInfo = namedtuple('RelInfo', ['attr', 'direction'])
 
 
 def related_models(model):
     m = inspect(model)
-    return {r.mapper.class_: attr for attr, r in m.relationships.items()}
+    return {r.mapper.class_: RelInfo(attr, r.direction)
+            for attr, r in m.relationships.items()}
 
 
 def pk_attr_name(model):
@@ -17,5 +22,3 @@ def pk_attr_name(model):
 def is_pk(attr_column):
     attr, col_prop = attr_column
     return find(lambda c: c.primary_key, col_prop.columns) is not None
-
-
