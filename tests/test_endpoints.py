@@ -27,46 +27,56 @@ from tests.fixtures import (
     session,
 )
 from tests.flask_test_helpers import get_json, patch, post_json
+from apitools.datagenerator import DataGenerator
 
 
+generator = DataGenerator()
 path = [Root, Level1, Level2, Level3]
+
+
+@fixture
+def app():
+    return Flask(__name__)
 
 
 def test_schemas_for_paths(cyclic_graph):
     paths = (
         (Parent, Child),
         (Parent, Child, Grandchild),
-        (Child, Parent),
-        (Child, Grandchild),
     )
     config = {
         Parent: {
+            'url_name': 'parents',
             'schema': create_schema(Parent, {'exclude': ('children',)})()
         },
         Child: {
+            'url_name': 'children',
             'schema': create_schema(
                 Child,
                 {'exclude': ('parents', 'grandchildren')}
             )()
         },
         Grandchild: {
+            'url_name': 'grandchildren',
             'schema': create_schema(Grandchild)()
         }
     }
     parent_hyper_schema = to_jsonschema(config[Parent]['schema'])
     child_hyper_schema = to_jsonschema(config[Child]['schema'])
     grandchild_hyper_schema = to_jsonschema(config[Grandchild]['schema'])
-    parent_hyper_schema['links'] = [{
-        'rel': 'children',
-        'href': '/{id}/children',
-        'schema_key': Child,
-    }]
-    child_hyper_schema['links'] = [
+    parent_hyper_schema['links'] = [
         {
-            'rel': 'parents',
-            'href': '/{id}/parents',
+            'rel': 'children',
+            'href': '/{id}/children',
+            'schema_key': Child,
+        },
+        {
+            'rel': 'self',
+            'href': '/parents',
             'schema_key': Parent,
         },
+    ]
+    child_hyper_schema['links'] = [
         {
             'rel': 'grandchildren',
             'href': '/{id}/grandchildren',
@@ -82,6 +92,10 @@ def test_schemas_for_paths(cyclic_graph):
     schemas = schemas_for_paths(paths, config, cyclic_graph)
     x = {m: links_to_tuple(s) for m, s in correct_schemas.iteritems()}
     y = {m: links_to_tuple(s) for m, s in schemas.iteritems()}
+    for ss in (correct_schemas, schemas):
+        for m, s in ss.iteritems():
+            del s['links']
+    assert correct_schemas == schemas
     assert y == x
 
 
@@ -91,9 +105,47 @@ def links_to_tuple(schema):
     return new_schema
 
 
-def test_register_handlers(state, hierarchy_graph, hierarchy_data):
+def test_api_with_schema(session, app):
+    roots = [Root]
+    c = app.test_client()
+    for root in roots:
+        apis, schemas = create_api(root, session)
+        register_all_apis(app, (schemas, ), (apis, ))
+        schema = schemas[root]
+        url = find(lambda l: l['rel'] == 'self', schema['links'])['href']
+        check_endpoint_(c, url, root, schemas)
+
+
+def check_endpoint_(client, url, model, schemas):
+    schema = schemas[model]
+    items = (generator.random_value(schema) for i in xrange(10))
+    ids = {check_post_and_return_id(client, url, item): item for item in items}
+    for _id, item in ids.iteritems():
+        url = '/'.join(url, _id)
+        response = client.get(url)
+        assert response.status_code == 200
+        data = json.loads(response.data)
+    for k, v in item.iteritems():
+        assert k in data
+        assert data[k] == v
+    for l in schema['links']:
+        for _id, _ in ids.iteritems():
+            url = '/'.join(url, _id)
+            new_url = ''.join((url, l['href']))
+            check_endpoint(client, new_url, l['schema_key'], schemas)
+            client.delete(url)
+
+
+def check_post_and_return_id(client, url, item):
+    response = post_json(client, url, item)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'id' in data
+    return data['id']
+
+
+def test_register_handlers(state, hierarchy_graph, hierarchy_data, app):
     config, session = state
-    app = Flask(__name__)
     app.debug = True
     client = app.test_client()
 

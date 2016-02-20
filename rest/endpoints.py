@@ -67,6 +67,8 @@ def schemas_for_paths(paths, config, graph):
     schemas = {m: to_jsonschema(config[m]['schema']) for m in all_models}
     model_relation_pairs = chain.from_iterable([zip(p, p[1:]) for p in paths])
     by_model = list_dict(model_relation_pairs)
+    root = paths[0][0]
+    print(root)
 
     for m, s in schemas.iteritems():
         s['links'] = reduce(
@@ -78,6 +80,13 @@ def schemas_for_paths(paths, config, graph):
             list(set(by_model[m])),
             []
         )
+    schemas[root]['links'].append(
+        {
+            'rel': 'self',
+            'href': '/'.join(('', config[root]['url_name'])),
+            'schema_key': root
+        }
+    )
     return schemas
 
 
