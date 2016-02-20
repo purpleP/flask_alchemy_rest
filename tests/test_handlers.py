@@ -393,9 +393,9 @@ def test_post_root(session):
     assert roots[0].name == 'root_1'
 
 
-def test_post_non_root(session):
+def test_post_non_root(session, query_modifiers):
     q = partial(query, model_to_query=Level2,
-                query_modifiers=query_modifiers()[Level2])
+                query_modifiers=query_modifiers[Level2])
     c = client(
             handler_maker=lambda s: data_handler(
                     partial(
@@ -414,9 +414,15 @@ def test_post_non_root(session):
     )
     response = post_json(c, l3_col_url, {'name': 'level3_1'})
     assert response.status_code == 200
-    l3s = session.query(Level2).one().level3s
+    l3s = session.query(Level2).filter_by(name='level2_1').one().level3s
     assert len(l3s) == 1
     assert l3s[0].name == 'level3_1'
+    url = '/roots/root1/level1s/level1_1/level2s/level2_2/level3s'
+    response = post_json(c, url, {'name': 'level3_2'})
+    assert response.status_code == 200
+    l3s = session.query(Level2).filter_by(name='level2_2').one().level3s
+    assert len(l3s) == 1
+    assert l3s[0].name == 'level3_2'
 
 
 def test_post_many_to_many(session):

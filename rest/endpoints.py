@@ -112,7 +112,6 @@ def query_modifiers_for_path(graph, config, path):
 
 
 def apis_for_path(path, config, db_session, graph):
-
     col_rule, item_rule = url_rules_for_path(path[1:], config)
     model = path[-1]
     parent = path[-2]

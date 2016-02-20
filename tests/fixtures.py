@@ -180,6 +180,7 @@ def paths():
     return list(reversed(tails(pairs)))[1:]
 
 
+@fixture()
 def query_modifiers():
     qms = tuple((partial(filter_, getattr(m, config[m]['exposed_attr'])),)
                 for m in full_path)
@@ -219,7 +220,9 @@ def l0_empty(s):
 
 def l3_empty(s):
     root, l1, l2, l3 = data()
+    l2_2 = Level2(name='level2_2')
     l1.level2s.append(l2)
+    l1.level2s.append(l2_2)
     root.level1s.append(l1)
     s.add(root)
     return s
