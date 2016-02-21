@@ -1,6 +1,7 @@
 import json
 
 from flask import Flask
+from functools import partial
 from pytest import fixture
 from rest.endpoints import (
     create_api,
@@ -10,7 +11,9 @@ from rest.endpoints import (
     url_rules_for_path,
 )
 from rest.handlers import create_schema
+from rest.decorators import without_relations
 from rest.helpers import find
+from rest.generators import object_
 from rest.schema import to_jsonschema
 from tests.fixtures import (
     Child,
@@ -27,10 +30,8 @@ from tests.fixtures import (
     session,
 )
 from tests.flask_test_helpers import get_json, patch, post_json
-from apitools.datagenerator import DataGenerator
 
 
-generator = DataGenerator()
 path = [Root, Level1, Level2, Level3]
 
 
@@ -105,11 +106,31 @@ def links_to_tuple(schema):
     return new_schema
 
 
+class DataHolder(object):
+    def __init__(self, session):
+        self.graph = None
+        self.session = session
+
+    def extract_graph(self, graph):
+        self.graph = graph
+        return graph
+
+    def remove_relations(self, config):
+        return without_relations(self.session, self.graph, config)
+
+
 def test_api_with_schema(session, app):
     roots = [Root]
     c = app.test_client()
+    dh = DataHolder(session)
+
     for root in roots:
-        apis, schemas = create_api(root, session)
+        apis, schemas = create_api(
+            root,
+            session,
+            graph_decorator=dh.extract_graph,
+            config_decorator=dh.remove_relations
+        )
         register_all_apis(app, (schemas, ), (apis, ))
         schema = schemas[root]
         url = find(lambda l: l['rel'] == 'self', schema['links'])['href']
@@ -118,21 +139,21 @@ def test_api_with_schema(session, app):
 
 def check_endpoint_(client, url, model, schemas):
     schema = schemas[model]
-    items = (generator.random_value(schema) for i in xrange(10))
+    items = (object_(schema) for i in xrange(10))
     ids = {check_post_and_return_id(client, url, item): item for item in items}
     for _id, item in ids.iteritems():
-        url = '/'.join(url, _id)
+        url = '/'.join((url, _id.lower()))
         response = client.get(url)
         assert response.status_code == 200
         data = json.loads(response.data)
-    for k, v in item.iteritems():
-        assert k in data
-        assert data[k] == v
+        for k, v in item.iteritems():
+            assert k in data
+            assert data[k] == v
     for l in schema['links']:
         for _id, _ in ids.iteritems():
-            url = '/'.join(url, _id)
+            url = '/'.join((url, _id))
             new_url = ''.join((url, l['href']))
-            check_endpoint(client, new_url, l['schema_key'], schemas)
+            check_endpoint_(client, new_url, l['schema_key'], schemas)
             client.delete(url)
 
 
