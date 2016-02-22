@@ -131,6 +131,8 @@ def test_api_with_schema(session, app):
             graph_decorator=dh.extract_graph,
             config_decorator=dh.remove_relations
         )
+        for s in schemas.values():
+            s['properties']['name']['pattern'] = '[a-z]{1,10}$'
         register_all_apis(app, (schemas, ), (apis, ))
         schema = schemas[root]
         url = find(lambda l: l['rel'] == 'self', schema['links'])['href']
@@ -139,26 +141,32 @@ def test_api_with_schema(session, app):
 
 def check_endpoint_(client, url, model, schemas):
     schema = schemas[model]
-    items = (object_(schema) for i in xrange(10))
+    items = (object_(schema) for i in xrange(2))
     ids = {check_post_and_return_id(client, url, item): item for item in items}
-    for _id, item in ids.iteritems():
-        url = '/'.join((url, _id.lower()))
-        response = client.get(url)
-        assert response.status_code == 200
-        data = json.loads(response.data)
+    urls = {'/'.join((url, _id)): item for _id, item in ids.iteritems()}
+    responses = [(item, client.get(item_url))
+                 for item_url, item in urls.iteritems()]
+    is_oks = [r.status_code == 200 for i, r in responses]
+    assert all(is_oks)
+    datas = [(i, json.loads(r.data)) for i, r in responses]
+    for item, data in datas:
         for k, v in item.iteritems():
             assert k in data
             assert data[k] == v
-    for l in schema['links']:
-        for _id, _ in ids.iteritems():
-            url = '/'.join((url, _id))
-            new_url = ''.join((url, l['href']))
+    links = (l for l in schema['links'] if l['rel'] != 'self')
+    for l in links:
+        for _id in ids.keys():
+            new_url = ''.join((url, l['href'].format(id=_id)))
             check_endpoint_(client, new_url, l['schema_key'], schemas)
-            client.delete(url)
+    for url in urls.keys():
+        client.delete(url)
 
 
 def check_post_and_return_id(client, url, item):
     response = post_json(client, url, item)
+    if response.status_code != 200:
+        print('************')
+        print('Oh Oh! url is {}'.format(url))
     assert response.status_code == 200
     data = json.loads(response.data)
     assert 'id' in data
