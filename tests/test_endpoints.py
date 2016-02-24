@@ -116,18 +116,29 @@ def test_api_with_schema(session, app):
         check_endpoint_(c, url, root, schemas)
 
 
+def check_dict_contains(d1, d2):
+    for k, v in d1.iteritems():
+        assert k in d2
+        assert d2[k] == v
+    
+
+
 def check_endpoint_(client, url, model, schemas):
     schema = schemas[model]
     items = (generator.random_value(schema) for i in xrange(10))
     ids = {check_post_and_return_id(client, url, item): item for item in items}
+    response = client.get(url)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'items' in data
+    for d in data['items']:
+        check_
+
     for _id, item in ids.iteritems():
         url = '/'.join(url, _id)
         response = client.get(url)
         assert response.status_code == 200
         data = json.loads(response.data)
-    for k, v in item.iteritems():
-        assert k in data
-        assert data[k] == v
     for l in schema['links']:
         for _id, _ in ids.iteritems():
             url = '/'.join(url, _id)
