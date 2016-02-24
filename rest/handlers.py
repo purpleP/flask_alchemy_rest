@@ -36,6 +36,9 @@ def get_item(db_session, query, serializer, *keys):
         item = item_query.one()
         return jsonify(serializer(item))
     except NoResultFound:
+        names = [i.name for i in query(session=db_session, keys=keys[1:]).all()]
+        print(names)
+        print(keys)
         return 'No such resource', 404
 
 

@@ -1,4 +1,5 @@
 from collections import defaultdict, namedtuple
+from copy import deepcopy
 from functools import partial, reduce
 from itertools import chain
 
@@ -245,7 +246,7 @@ def register_all_apis(app, schemas, all_apis):
         (api.values() for api in all_apis)
     )
     eps = endpoints_params(chain.from_iterable(endpoints))
-    out_schemas = reduce(merge, schemas, {})
+    out_schemas = deepcopy(reduce(merge, schemas, {}))
     for schema in out_schemas.values():
         for l in schema['links']:
             l['schema_key'] = str(l['schema_key'])

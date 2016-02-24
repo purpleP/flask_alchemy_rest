@@ -23,20 +23,20 @@ ModelBase = declarative_base()
 
 class Root(ModelBase):
     __tablename__ = 'roots'
-    name = Column(String, primary_key=True)
+    name = Column(String, primary_key=True, nullable=False)
     level1s = relationship('Level1')
 
 
 class Level1(ModelBase):
     __tablename__ = 'level1s'
-    name = Column(String, primary_key=True)
+    name = Column(String, primary_key=True, nullable=False)
     root_pk = Column(String, ForeignKey('roots.name'))
     level2s = relationship('Level2')
 
 
 class Level2(ModelBase):
     __tablename__ = 'level2s'
-    name = Column(String, primary_key=True)
+    name = Column(String, primary_key=True, nullable=False)
     level1_pk = Column(String, ForeignKey('level1s.name'))
     level3s = relationship('Level3')
 
@@ -87,7 +87,7 @@ class Grandchild(ModelBase):
 
 class Level3(ModelBase):
     __tablename__ = 'level3s'
-    name = Column(String, primary_key=True)
+    name = Column(String, primary_key=True, nullable=False)
     level2_pk = Column(String, ForeignKey('level2s.name'))
 
     def __ne__(self, other):

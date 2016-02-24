@@ -24,6 +24,7 @@ def without_relations(session, graph, config):
         acc = defaultdict(tuple)
         schema_attrs = reduce(by_rel_type, graph.successors(m), acc)
         schema = create_schema(m, schema_attrs)()
+        config[m]['schema'] = schema
         conf['collection_serializer'] = partial(
             serialize_collection,
             schema,
