@@ -1,6 +1,6 @@
 from collections import defaultdict, namedtuple
 from copy import deepcopy
-from functools import partial, reduce
+from functools import partial
 from itertools import chain
 
 from rest.handlers import (
@@ -22,7 +22,7 @@ from rest.handlers import (
     serialize_collection,
     serialize_item,
 )
-from rest.helpers import identity, list_dict, merge
+from rest.helpers import identity, list_dict
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
 from rest.query import filter_, join, query
@@ -246,7 +246,7 @@ def register_all_apis(app, schemas, all_apis):
         (api.values() for api in all_apis)
     )
     eps = endpoints_params(chain.from_iterable(endpoints))
-    out_schemas = deepcopy(reduce(merge, schemas, {}))
+    out_schemas = deepcopy(schemas)
     for schema in out_schemas.values():
         for l in schema['links']:
             l['schema_key'] = str(l['schema_key'])

@@ -1,8 +1,9 @@
 import json
 
 from flask import Flask
-from functools import partial
+from functools import reduce
 from pytest import fixture
+import pytest
 from rest.endpoints import (
     create_api,
     default_config,
@@ -10,6 +11,7 @@ from rest.endpoints import (
     schemas_for_paths,
     url_rules_for_path,
 )
+from rest.helpers import merge
 from rest.handlers import create_schema
 from rest.decorators import without_relations
 from rest.helpers import find
@@ -119,37 +121,70 @@ class DataHolder(object):
         return without_relations(self.session, self.graph, config)
 
 
-def test_api_with_schema(session, app):
-    roots = [Root]
-    c = app.test_client()
+def api(session, app, roots):
     dh = DataHolder(session)
+    apis_with_schemas = [create_api(
+        root,
+        session,
+        graph_decorator=dh.extract_graph,
+        config_decorator=dh.remove_relations
+    )
+        for root in roots]
+    apis = (apis for apis, schemas in apis_with_schemas)
+    schemas = (schemas for apis, schemas in apis_with_schemas)
+    complete_schemas = reduce(merge, schemas, {})
 
+    for s in complete_schemas.values():
+        s['properties']['name']['pattern'] = '[a-z]{1,10}$'
+    register_all_apis(app, complete_schemas, apis)
+    return complete_schemas, roots, app.test_client()
+
+
+@pytest.mark.parametrize('schemas,roots,client', [
+    api(session(), app(), [Root]),
+    # api(session(), app(), [Parent, Child])
+])
+def test_api(schemas, roots, client):
     for root in roots:
-        apis, schemas = create_api(
-            root,
-            session,
-            graph_decorator=dh.extract_graph,
-            config_decorator=dh.remove_relations
-        )
-        for s in schemas.values():
-            s['properties']['name']['pattern'] = '[a-z]{1,10}$'
-        register_all_apis(app, (schemas, ), (apis, ))
         schema = schemas[root]
         url = find(lambda l: l['rel'] == 'self', schema['links'])['href']
-        check_endpoint_(c, url, root, schemas)
+        check_endpoint(client, url, root, schemas)
 
 
-def check_dict_contains(d1, d2):
-    for k, v in d1.iteritems():
-        assert k in d2
-        assert d2[k] == v
-    
+def dict_contains(d1, d2):
+    for k, v in d2.iteritems():
+        if k not in d1:
+            return False
+        else:
+            if d1[k] != v:
+                return False
+    return True
 
 
-def check_endpoint_(client, url, model, schemas):
+def check_endpoint(client, url, model, schemas):
+    # TODO check PATCH
+    # TODO refactor to be able to check many-to-many relationships
+    response = client.get(url)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'items' in data
+    assert len(data['items']) == 0
     schema = schemas[model]
-    items = (object_(schema) for i in xrange(2))
+    items_to_upload_count = 2
+    items = []
+    while (len(items) != items_to_upload_count):
+        random_object = object_(schema)
+        if random_object not in items:
+            items.append(random_object)
     ids = {check_post_and_return_id(client, url, item): item for item in items}
+    response = client.get(url)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'items' in data
+    assert len(data['items']) == len(items)
+    is_uploaded = {_id: any([dict_contains(ri, i) for ri in data['items']])
+                   for _id, i in ids.iteritems()}
+    assert all(is_uploaded.values()) is True
     urls = {'/'.join((url, _id)): item for _id, item in ids.iteritems()}
     responses = [(item, client.get(item_url))
                  for item_url, item in urls.iteritems()]
@@ -161,126 +196,28 @@ def check_endpoint_(client, url, model, schemas):
             assert k in data
             assert data[k] == v
     links = (l for l in schema['links'] if l['rel'] != 'self')
-    for l in links:
+
+    def is_many_to_many(link):
+        return model in [
+            l['schema_key'] for l in schemas[link['schema_key']]['links']
+        ]
+    simple_links = (l for l in links if not is_many_to_many(l))
+    # many_to_many_links = (l for l in links if is_many_to_many(l))
+
+    for l in simple_links:
         for _id in ids.keys():
             new_url = ''.join((url, l['href'].format(id=_id)))
-            check_endpoint_(client, new_url, l['schema_key'], schemas)
+            check_endpoint(client, new_url, l['schema_key'], schemas)
     for url in urls.keys():
         client.delete(url)
 
 
-
-
 def check_post_and_return_id(client, url, item):
     response = post_json(client, url, item)
-    if response.status_code != 200:
-        print('************')
-        print('Oh Oh! url is {}'.format(url))
     assert response.status_code == 200
     data = json.loads(response.data)
     assert 'id' in data
     return data['id']
-
-
-def test_register_handlers(state, hierarchy_graph, hierarchy_data, app):
-    config, session = state
-    app.debug = True
-    client = app.test_client()
-
-    root_apis, from_root_schemas = create_api(Root, session)
-
-    parent_apis, from_parent_schemas = create_api(Parent, session)
-
-    child_apis, from_child_schemas = create_api(Child, session)
-    all_schemas = (from_root_schemas, from_parent_schemas, from_child_schemas)
-    all_apis = (root_apis, parent_apis, child_apis)
-    register_all_apis(app, all_schemas, all_apis)
-
-    check_endpoints(client, '', hierarchy_data,
-                    config, hierarchy_graph, Root)
-    response = post_json(client, '/parents', {'name': 'Adam'})
-    assert response.status_code == 200
-    adam_id = json.loads(response.data)['id']
-    response = post_json(client, '/parents', {'name': 'Eve'})
-    assert response.status_code == 200
-    eve_id = json.loads(response.data)['id']
-    cain = {'name': 'Cain'}
-    response = post_json(client, '/children', cain)
-    assert response.status_code == 200
-    cain_id = json.loads(response.data)['id']
-    response = post_json(client, '/parents/' + str(adam_id) + '/' + 'children',
-                         {'id': cain_id})
-    assert response.status_code == 200
-    response = client.get('/parents/' + str(adam_id))
-    assert response.status_code == 200
-    children = json.loads(response.data)['children']
-    assert len(children) == 1
-    assert children[0] == cain_id
-    response = post_json(client, '/parents/' + str(eve_id) + '/' + 'children',
-                         {'id': cain_id})
-    assert response.status_code == 200
-    response = client.get('/parents/' + str(eve_id))
-    assert response.status_code == 200
-    children = json.loads(response.data)['children']
-    assert len(children) == 1
-    assert children[0] == cain_id
-    response = client.get('/'.join(('/children', str(cain_id))))
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert data['parents'] == [adam_id, eve_id]
-    response = client.delete(
-        '/parents/' + str(eve_id) + '/children/' + str(cain_id))
-    assert response.status_code == 200
-    data = get_json(client, '/parents/' + str(eve_id) + '/children')
-    assert len(data['items']) == 0
-
-
-def check_endpoints(client, url, all_data_to_upload, config, graph,
-                    start_node):
-    url_name = config[start_node]['url_name']
-    url = '/'.join([url, url_name])
-    s = config[start_node]['collection_serializer']
-    d = find(lambda x: isinstance(x[0], start_node), all_data_to_upload)
-    item_as_dict = s(d)['items'][0]
-    new_url = check_endpoint(client, url, item_as_dict)
-    for s in graph.successors_iter(start_node):
-        check_endpoints(client, new_url, all_data_to_upload, config, graph, s)
-    response = patch(client, new_url, {'name': 'new_name'})
-    assert response.status_code == 200
-    new_url_parts = new_url.split('/')[:-1] + ['new_name']
-    response = client.delete('/'.join(new_url_parts))
-    assert response.status_code == 200
-    data = get_json(client, url)
-    assert len(data['items']) == 0
-
-
-def check_endpoint(client, collection_url, item_as_dict):
-    check_collection_is_empty(client, collection_url)
-    assert client.get(collection_url + '/' + 'zzz').status_code == 404
-    response = post_json(client, collection_url, item_as_dict)
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert 'id' in data
-    _id = data['id']
-    response = client.get(collection_url)
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert 'items' in data
-    assert len(data['items']) == 1
-    assert data['items'][0] == item_as_dict
-    item_url = collection_url + '/' + str(_id)
-    response = client.get(item_url)
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert data == item_as_dict
-    return item_url
-
-
-def check_collection_is_empty(client, url):
-    response = client.get(url)
-    assert response.status_code == 200
-    assert 'items' in response.data
-    assert len(json.loads(response.data)['items']) == 0
 
 
 def test_url_for_path(config):
