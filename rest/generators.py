@@ -40,7 +40,7 @@ def object_(schema):
     ))
     included_non_required = ((name, p) for name, p in props.get(False, ())
                              if choice((True, False)))
-    props_to_convert = chain(props[True], included_non_required)
+    props_to_convert = chain(props.get(True, []), included_non_required)
     return reduce(random_property, props_to_convert, {})
 
 

@@ -1,9 +1,9 @@
-from pytest import fixture, fail
+from pytest import fail
+import pytest
 from rest.generators import object_
 from jsonschema import validate, ValidationError
 
 
-@fixture()
 def schema():
     return {
         'type': 'object',
@@ -42,6 +42,16 @@ def schema():
     }
 
 
+def schema_without_requited():
+    s = schema()
+    s['required'] = []
+    return s
+
+
+@pytest.mark.parametrize('schema', [
+    schema(),
+    schema_without_requited(),
+])
 def test_generator(schema):
     try:
         validate(object_(schema), schema)

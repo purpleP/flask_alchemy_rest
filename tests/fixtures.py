@@ -60,7 +60,7 @@ association_table = Table(
 class Parent(ModelBase):
     __tablename__ = 'parents'
     id = Column(Integer, primary_key=True)
-    name = Column(String)
+    name = Column(String, nullable=False)
     children = relationship(
             "Child",
             secondary=association_table,
@@ -70,7 +70,7 @@ class Parent(ModelBase):
 class Child(ModelBase):
     __tablename__ = 'children'
     id = Column(Integer, primary_key=True)
-    name = Column(String)
+    name = Column(String, nullable=False)
     parents = relationship(
             "Parent",
             secondary=association_table,
@@ -82,7 +82,7 @@ class Grandchild(ModelBase):
     __tablename__ = 'blabla'
     id = Column(Integer, primary_key=True)
     child_id = Column(Integer, ForeignKey('children.id'))
-    name = Column(String)
+    name = Column(String, nullable=False)
 
 
 class Level3(ModelBase):
