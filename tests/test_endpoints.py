@@ -137,18 +137,15 @@ def api(session, app, roots):
     for s in complete_schemas.values():
         s['properties']['name']['pattern'] = '[a-z]{1,10}$'
     register_all_apis(app, complete_schemas, apis)
-    return complete_schemas, roots, app.test_client()
+    return complete_schemas, app.test_client()
 
 
-@pytest.mark.parametrize('schemas,roots,client', [
-    api(session(), app(), [Root]),
-    # api(session(), app(), [Parent, Child])
+@pytest.mark.parametrize('schemas,client', [
+    api(session(), app(), (Root,)),
+    # api(session(), app(), (Parent, Child))
 ])
-def test_api(schemas, roots, client):
-    for root in roots:
-        schema = schemas[root]
-        url = find(lambda l: l['rel'] == 'self', schema['links'])['href']
-        check_endpoint(client, url, root, schemas)
+def test_api(schemas, client):
+        check_endpoint(client, '', schemas)
 
 
 def dict_contains(d1, d2):
@@ -161,55 +158,87 @@ def dict_contains(d1, d2):
     return True
 
 
-def check_endpoint(client, url, model, schemas):
+def check_endpoint(client, url, schemas, model=None):
     # TODO check PATCH
     # TODO refactor to be able to check many-to-many relationships
-    response = client.get(url)
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert 'items' in data
-    assert len(data['items']) == 0
-    schema = schemas[model]
-    items_to_upload_count = 2
-    items = []
-    while (len(items) != items_to_upload_count):
-        random_object = object_(schema)
-        if random_object not in items:
-            items.append(random_object)
-    ids = {check_post_and_return_id(client, url, item): item for item in items}
+    if model:
+        schema = schemas[model]
+
+        def is_many_to_many(link):
+            return model in [
+                l['schema_key'] for l in schemas[link['schema_key']]['links']
+            ]
+        links = (l for l in schema['links'] if l['rel'] != 'self')
+        simple_links = (l for l in links if not is_many_to_many(l))
+        many_to_many_links = (l for l in links if is_many_to_many(l))
+        check_empty_collection(client, url)
+
+        upload_count = 2
+        ids_to_items = upload_random_data(client, upload_count, schema, url)
+        check_if_uploaded(client, ids_to_items, url)
+    else:
+        links = [l for s in schemas.values() for l in s['links']
+                 if l['rel'] == 'self']
+        simple_links = links
+        ids_to_items = {'': None}
+        many_to_many_links = ()
+
+    next_level_data = [(
+        l,
+        {_id: check_endpoint(
+                client,
+                ''.join((url, l['href'].format(id=_id))),
+                schemas,
+                l['schema_key']
+            )
+         for _id in ids_to_items.keys()}
+    )
+        for l in simple_links]
+    print(next_level_data)
+
+    return many_to_many_links, ids_to_items
+
+    # for l, urls in circular_links_by_ids:
+        # for url, data in urls.iteritems():
+            # for _id in data.ids:
+                # item_url = '/'.join((url, _ids))
+                # client.delete(item_url)
+
+
+def check_if_uploaded(client, items, url):
     response = client.get(url)
     assert response.status_code == 200
     data = json.loads(response.data)
     assert 'items' in data
     assert len(data['items']) == len(items)
     is_uploaded = {_id: any([dict_contains(ri, i) for ri in data['items']])
-                   for _id, i in ids.iteritems()}
+                   for _id, i in items.iteritems()}
     assert all(is_uploaded.values()) is True
-    urls = {'/'.join((url, _id)): item for _id, item in ids.iteritems()}
-    responses = [(item, client.get(item_url))
-                 for item_url, item in urls.iteritems()]
+    responses = [(item, client.get('/'.join((url, _id))))
+                 for _id, item in items.iteritems()]
     is_oks = [r.status_code == 200 for i, r in responses]
     assert all(is_oks)
-    datas = [(i, json.loads(r.data)) for i, r in responses]
-    for item, data in datas:
-        for k, v in item.iteritems():
-            assert k in data
-            assert data[k] == v
-    links = (l for l in schema['links'] if l['rel'] != 'self')
+    response_contains_item = [dict_contains(json.loads(r.data), i)
+                              for i, r in responses]
+    assert all(response_contains_item)
 
-    def is_many_to_many(link):
-        return model in [
-            l['schema_key'] for l in schemas[link['schema_key']]['links']
-        ]
-    simple_links = (l for l in links if not is_many_to_many(l))
-    # many_to_many_links = (l for l in links if is_many_to_many(l))
 
-    for l in simple_links:
-        for _id in ids.keys():
-            new_url = ''.join((url, l['href'].format(id=_id)))
-            check_endpoint(client, new_url, l['schema_key'], schemas)
-    for url in urls.keys():
-        client.delete(url)
+def upload_random_data(client, items_to_upload_count, schema, url):
+    items = []
+    while (len(items) != items_to_upload_count):
+        random_object = object_(schema)
+        if random_object not in items:
+            items.append(random_object)
+    ids = {check_post_and_return_id(client, url, item): item for item in items}
+    return ids
+
+
+def check_empty_collection(client, url):
+    response = client.get(url)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'items' in data
+    assert len(data['items']) == 0
 
 
 def check_post_and_return_id(client, url, item):

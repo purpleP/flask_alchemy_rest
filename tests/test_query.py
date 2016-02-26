@@ -1,73 +1,93 @@
 from functools import partial
+import pytest
 
-from rest.helpers import tails
-from rest.query import query, zip_
+from rest.query import query
 from tests.fixtures import (
-    Child,
-    child_collection_query_modifiers,
-    full_path,
-    parent_with_child,
-    query_modifiers,
+    hierarchy_full_data,
+    circular_full_data,
     session,
-    h_data,
-    state,
+    Root,
+    Level1,
+    Level2,
+    Level3,
+    Child,
+    Parent,
 )
 
 
-def test_query(state):
-    session, data = state
-    keys = list(reversed(tails([d[0].name for d in data[1:]])))
-    for values, d, model_to_query in zip(keys[:-1], reversed(data),
-                                         reversed(full_path)):
-        check_column_query(session, model_to_query,
-                           query_modifiers()[model_to_query], values, d)
+class Helper(object):
 
-    for value, d, model_to_query in zip(keys, reversed(data),
-                                        reversed(full_path)):
-        check_item_query(session, model_to_query,
-                         query_modifiers()[model_to_query], value, d)
+    def __init__(self, session, data_creator):
+        self.session = session
+        self.roots = data_creator(session)
+        self.session.commit()
 
 
-def check_item_query(session, model_to_query, query_modifiers, keys,
-                     correct_items):
-    iq = partial(query, session, model_to_query, query_modifiers)
-    result = iq(keys).all()
-    assert result == correct_items
-
-
-def check_column_query(session, model_to_query, query_modifiers, keys,
-                       correct_items):
-    cq = partial(query, session, model_to_query, query_modifiers)
-    result = cq(keys).all()
-    assert result == correct_items
-
-
-def add(x, y):
-    return x + y
-
-
-add2 = partial(add, 2)
-add23 = partial(add2, 3)
-
-
-def test_zip_():
-    fss = ((add2, add23), (add2,))
-    values = (1, 2)
-    output = [f(*vs) for f, vs in zip_(fss, values)]
-    assert output == [3, 5, 4]
-    fss = ((add2, add23), (add2,), (add2,))
-    output = [f(*vs) for f, vs in zip_(fss, values)]
-    assert output == [5, 3, 4]
-
-
-def test_many_to_many_query(session):
-    parent_with_child(session)
-    session.commit()
-    keys = (1,)
-    children_q = query(
-            session,
+@pytest.mark.parametrize('helper,query,correct_result', [
+    (
+        Helper(session(), hierarchy_full_data),
+        partial(
+            query,
+            model_to_query=Level3,
+            join_attrs=(Level2, Level1, Root),
+            attrs_to_filter=(Level2.name, Level1.name, Root.name),
+            keys=(
+                '.root.0.level1.0.level2.0',
+                '.root.0.level1.0',
+                '.root.0',
+            )
+        ),
+        lambda roots: [
+            l3
+            for r in roots if r.name == '.root.0'
+            for l1 in r.level1s if l1.name == '.root.0.level1.0'
+            for l2 in l1.level2s if l2.name == '.root.0.level1.0.level2.0'
+            for l3 in l2.level3s
+        ]
+    ),
+    (
+        Helper(session(), hierarchy_full_data),
+        partial(
+            query,
+            model_to_query=Level3,
+            join_attrs=(Level2, Level1, Root),
+            attrs_to_filter=(Level3.name, Level2.name, Level1.name, Root.name),
+            keys=(
+                '.root.0.level1.0.level2.0.level3.0',
+                '.root.0.level1.0.level2.0',
+                '.root.0.level1.0',
+                '.root.0',
+            )
+        ),
+        lambda roots: [
+            l3
+            for r in roots if r.name == '.root.0'
+            for l1 in r.level1s if l1.name == '.root.0.level1.0'
+            for l2 in l1.level2s if l2.name == '.root.0.level1.0.level2.0'
+            for l3 in l2.level3s
+            if l3.name == '.root.0.level1.0.level2.0.level3.0'
+        ]
+    ),
+    (
+        Helper(session(), circular_full_data),
+        partial(
+            query,
             model_to_query=Child,
-            query_modifiers=child_collection_query_modifiers,
-            keys=keys
-    )
-    assert len(children_q.all()) == 0
+            join_attrs=(Parent.children,),
+            attrs_to_filter=(Parent.name,),
+            keys=(
+                '.pseudoroot.0.parent.0',
+                '.pseudoroot.0',
+            )
+        ),
+        lambda roots: [
+            child
+            for r in roots if r.name == '.pseudoroot.0'
+            for p in r.parents if p.name == '.pseudoroot.0.parent.0'
+            for child in p.children
+        ]
+    ),
+])
+def test_query(helper, query, correct_result):
+    result = query(session=helper.session).all()
+    assert result == correct_result(helper.roots)

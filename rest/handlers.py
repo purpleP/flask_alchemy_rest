@@ -8,6 +8,9 @@ from marshmallow_sqlalchemy import ModelSchema
 from sqlalchemy.orm.exc import NoResultFound
 
 
+def handler(data_source, *keys, **kwargs)
+    pass
+
 def get_collection(db_session, query, serializer, *keys, **kwargs):
     spec = kwargs.get('spec', lambda x: x)
     from_ = kwargs.get('from_', None)
@@ -36,9 +39,6 @@ def get_item(db_session, query, serializer, *keys):
         item = item_query.one()
         return jsonify(serializer(item))
     except NoResultFound:
-        names = [i.name for i in query(session=db_session, keys=keys[1:]).all()]
-        print(names)
-        print(keys)
         return 'No such resource', 404
 
 

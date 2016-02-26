@@ -48,6 +48,12 @@ def list_dict(pairs):
     return reduce(to_dict, pairs, defaultdict(list))
 
 
+def merge_list(l1, l2):
+    def unique(acc, v):
+        return acc + [v] if v not in acc else acc
+    return reduce(unique, l1 + l2, [])
+
+
 def merge(d1, d2, path=[]):
     for k, d2v in d2.iteritems():
         if k in d1:
@@ -55,10 +61,7 @@ def merge(d1, d2, path=[]):
             if isinstance(d1v, Mapping) and isinstance(d2v, Mapping):
                 merge(d1v, d2v, path + [str(k)])
             elif isinstance(d1v, list) and isinstance(d2v, list):
-                unique_links_as_tuples = set(
-                    [tuple(ld.items()) for ld in d1v + d2v]
-                )
-                d1[k] = [dict(t) for t in unique_links_as_tuples]
+                d1[k] = merge_list(d1v, d2v)
             elif d1v == d2v:
                 pass
             else:

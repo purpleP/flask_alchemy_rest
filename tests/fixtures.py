@@ -1,9 +1,8 @@
-from functools import partial
-
 import networkx as nx
+from itertools import izip, imap, chain
+from functools import partial
 from pytest import fixture
 from rest.helpers import tails
-from rest.query import filter_, join
 from sqlalchemy import (
     Column,
     ForeignKey,
@@ -17,36 +16,52 @@ from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.orm.base import MANYTOMANY, ONETOMANY
 from sqlalchemy.pool import StaticPool
 
-
 ModelBase = declarative_base()
 
 
-class Root(ModelBase):
+class EqualByName(object):
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.name == other.name
+
+
+class DictRepr(object):
+    def __repr__(self):
+        return self.__class__.__name__ + 'with' + '\n'.join(
+            ('{} - {}'.format(k, str(v)) for k, v in self.__dict__.iteritems())
+        )
+
+
+class Root(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'roots'
     name = Column(String, primary_key=True, nullable=False)
     level1s = relationship('Level1')
 
 
-class Level1(ModelBase):
+class Level1(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'level1s'
     name = Column(String, primary_key=True, nullable=False)
     root_pk = Column(String, ForeignKey('roots.name'))
     level2s = relationship('Level2')
 
+    def __repr__(self):
+        return 'Level1 named {}'.format(self.name)
 
-class Level2(ModelBase):
+
+class Level2(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'level2s'
     name = Column(String, primary_key=True, nullable=False)
     level1_pk = Column(String, ForeignKey('level1s.name'))
     level3s = relationship('Level3')
 
-    def __ne__(self, other):
-        return not self == other
-
     def __eq__(self, other):
-        if not isinstance(other, Level2):
+        if not isinstance(other, self.__class__):
             return False
-        return self.name == other.name and self.level1_pk == other.level1_pk
+        return self.name == other.name
+
+    def __repr__(self):
+        return 'Level2 named {}'.format(self.name)
 
 
 association_table = Table(
@@ -57,7 +72,7 @@ association_table = Table(
 )
 
 
-class Parent(ModelBase):
+class Parent(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'parents'
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
@@ -66,8 +81,13 @@ class Parent(ModelBase):
             secondary=association_table,
             back_populates="parents")
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.name == other.name
 
-class Child(ModelBase):
+
+class Child(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'children'
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
@@ -77,33 +97,36 @@ class Child(ModelBase):
             back_populates="children")
     grandchildren = relationship('Grandchild')
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.name == other.name
 
-class Grandchild(ModelBase):
+
+class Grandchild(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'blabla'
     id = Column(Integer, primary_key=True)
     child_id = Column(Integer, ForeignKey('children.id'))
     name = Column(String, nullable=False)
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.name == other.name
 
-class Level3(ModelBase):
+
+class Level3(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'level3s'
     name = Column(String, primary_key=True, nullable=False)
     level2_pk = Column(String, ForeignKey('level2s.name'))
 
-    def __ne__(self, other):
-        return not self == other
-
     def __eq__(self, other):
-        if not isinstance(other, Level3):
+        if not isinstance(other, self.__class__):
             return False
-        return self.name == other.name and self.level2_pk == other.level2_pk
+        return self.name == other.name
 
-
-def items():
-    level2 = Level2(name=u'level2')
-    level3 = Level3(name=u'level3')
-    level2.level3s.append(level3)
-    return level2, level3
+    def __repr__(self):
+        return 'Level3 named {}'.format(self.name)
 
 
 @fixture()
@@ -120,40 +143,67 @@ def session():
     return session
 
 
-@fixture()
-def h_data():
-    root = Root(name='root')
-    l1 = Level1(name='level1')
-    l2 = Level2(name='level2')
-    l3 = Level3(name='level3')
-    return root, l1, l2, l3
+def hierarchy_full_data(session):
+    items = make_items(hierarchy_graph(), Root)
+    for i in items:
+        session.add(i)
+    return items
 
 
-@fixture()
-def state(h_data, session):
-    session.add(h_data[0])
-    h_data[0].level1s.append(h_data[1])
-    h_data[1].level2s.append(h_data[2])
-    h_data[2].level3s.append(h_data[3])
-    session.commit()
-    return session, list(reversed(hierarchy_data(h_data)))
+def circular_full_data(session):
+    class PseudoRoot(object):
+        def __init__(self, name):
+            self.name = name
+            self.parents = []
+            self.children = []
+
+    g = cyclic_graph()
+    g.add_edge(PseudoRoot, Parent, rel_attr='parents')
+    g.add_edge(PseudoRoot, Child, rel_attr='children')
+    items = make_items(g, PseudoRoot)
+    real_roots = chain.from_iterable(((i.parents + i.children) for i in items))
+    for r in real_roots:
+        session.add(r)
+    return items
 
 
-@fixture()
-def hierarchy_data(h_data):
-    return [[x] for x in h_data]
+def make_items(graph, model_class, parent_name=''):
+    count = 2
+    items = [model_class(
+        name='.'.join(
+            (parent_name, model_class.__name__.lower(), str(i))
+        )
+    )
+        for i in xrange(count)]
+
+    one_to_many = [r for r in graph.successors_iter(model_class)
+                   if (r, model_class) not in graph.edges()]
+
+    rel_items = [(i, rel,  make_items(graph, rel, i.name))
+                 for i in items for rel in one_to_many]
+
+    for i, rel, items_ in rel_items:
+        rel_attr = graph[i.__class__][rel]['rel_attr']
+        getattr(i, rel_attr).extend(items_)
+
+    many_to_many = [(i1, from_rel, to_rel, (from_items, to_items))
+                    for i1, from_rel, from_items in rel_items
+                    for i2, to_rel, to_items in rel_items
+                    if i1 == i2 and (from_rel, to_rel) in graph.edges()]
+
+    def by_counter(rel_item):
+        return rel_item.name.split('.')[-1]
+
+    sorter = partial(sorted, key=by_counter)
+
+    for item, from_rel, to_rel, iss in many_to_many:
+        rel_attr = graph[from_rel][to_rel]['rel_attr']
+        for from_item, to_item in izip(*imap(sorter, iss)):
+            getattr(from_item, rel_attr).append(to_item)
+
+    return items
 
 
-def cycled_data():
-    adam = Parent(name='Adam')
-    eve = Parent(name='Eve')
-    cain = Child(name='Cain')
-    abel = Child(name='Abel')
-    return adam, eve, cain, abel
-
-
-level3_item_url = '/roots/root/level1s/level1/level2s/level2/level3s/level3'
-level3_collection_url = '/roots/root/level1s/level1/level2s/level2/level3s'
 level3_item_rule = '/roots/<level_0_id>/level1s/<level_1_id>/level2s/' \
                    '<level_2_id>/level3s/<level_3_id>'
 level3_collection_rule = '/roots/<level_0_id>/level1s/<level_1_id>/level2s/' \
@@ -181,13 +231,6 @@ def paths():
 
 
 @fixture()
-def query_modifiers():
-    qms = tuple((partial(filter_, getattr(m, config[m]['exposed_attr'])),)
-                for m in full_path)
-    return {m: qms_ for m, qms_ in zip(full_path, tails(qms))}
-
-
-@fixture()
 def hierarchy_graph():
     g = nx.DiGraph()
     g.add_edge(Root, Level1, rel_attr='level1s', rel_type=ONETOMANY)
@@ -203,84 +246,3 @@ def cyclic_graph():
     g.add_edge(Child, Parent, rel_attr='parents', rel_type=MANYTOMANY)
     g.add_edge(Child, Grandchild, rel_attr='grandchildren', rel_type=ONETOMANY)
     return g
-
-
-@fixture
-def data():
-    root = Root(name='root1')
-    l1 = Level1(name='level1_1')
-    l2 = Level2(name='level2_1')
-    l3 = Level3(name='level3_1')
-    return root, l1, l2, l3
-
-
-def l0_empty(s):
-    pass
-
-
-def l3_empty(s):
-    root, l1, l2, l3 = data()
-    l2_2 = Level2(name='level2_2')
-    l1.level2s.append(l2)
-    l1.level2s.append(l2_2)
-    root.level1s.append(l1)
-    s.add(root)
-    return s
-
-
-def hundred_roots_elements(s):
-    root, l1, l2, l3 = data()
-    l1.level2s.append(l2)
-    root.level1s.append(l1)
-    s.add(root)
-    l3s = [Level3(name='foo' + str(i)) for i in range(100)]
-    l2.level3s.extend(l3s)
-    return s
-
-
-def l3_non_empty(s):
-    root, l1, l2, l3 = data()
-    l1.level2s.append(l2)
-    root.level1s.append(l1)
-    l2.level3s.append(l3)
-    s.add(root)
-    return s
-
-
-def parent_child(s):
-    s.add(Parent(name='Eve'))
-    s.add(Parent(name='Adam'))
-    s.add(Child(name='Cain'))
-    return s
-
-
-def parent_with_child(s):
-    eve = Parent(name='eve')
-    adam = Parent(name='Adam')
-    s.add(eve)
-    s.add(adam)
-    cain = Child(name='Cain')
-    s.add(cain)
-    adam.children.append(cain)
-    return s
-
-
-def search_session(s):
-    root, l1, l2, l3 = data()
-    l1.level2s.append(l2)
-    root.level1s.append(l1)
-    l2.level3s.append(l3)
-    l2.level3s.append(Level3(name='find_me'))
-    s.add(root)
-    return s
-
-
-child_collection_query_modifiers = (
-    (
-        (),
-        partial(join, Parent, Child.parents),
-    ),
-    (
-        partial(filter_, Parent.id),
-    ),
-)

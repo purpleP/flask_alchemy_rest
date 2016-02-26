@@ -34,6 +34,7 @@ from tests.fixtures import (
     l0_empty,
     l3_empty,
     l3_non_empty,
+    l2_many,
     level3_collection_rule,
     level3_item_rule,
     parent_child,
@@ -69,7 +70,7 @@ def search_dict(name):
     return {'spec': json.dumps(spec_dict)}
 
 
-l3_col_url = '/roots/root1/level1s/level1_1/level2s/level2_1/level3s'
+l3_col_url = '/roots/root_1/level1s/level1_1/level2s/level2_1/level3s'
 l3_item_url = '/'.join((l3_col_url, 'level3_1'))
 
 Params = namedtuple('Params',
@@ -227,6 +228,16 @@ class GetCollectionNonEmptyParams(BasicCollectionParams):
                                                           correct_data)
 
 
+class GetCollectionManyNonEmptyParams(BasicCollectionParams):
+    def __init__(self):
+        session_modifier = l2_many
+        correct_data = {'items': []}
+        super(GetCollectionManyNonEmptyParams, self).__init__(
+            session_modifier,
+            correct_data
+        )
+
+
 class SearchCollectionParams(BasicCollectionParams):
     def __init__(self):
         session_modifier = search_session
@@ -300,6 +311,7 @@ class NonEmptyItemParams(BasicItemParams):
     EmptyChildCollectionParams().ps,
     NonEmptyChildCollectionParams().ps,
     GetCollectionCursoredParams().ps,
+    GetCollectionManyNonEmptyParams().ps,
 ])
 def test_get(r, url, status_code, correct_data):
     response = r(url)
@@ -417,7 +429,7 @@ def test_post_non_root(session, query_modifiers):
     l3s = session.query(Level2).filter_by(name='level2_1').one().level3s
     assert len(l3s) == 1
     assert l3s[0].name == 'level3_1'
-    url = '/roots/root1/level1s/level1_1/level2s/level2_2/level3s'
+    url = '/roots/root_1/level1s/level1_1/level2s/level2_2/level3s'
     response = post_json(c, url, {'name': 'level3_2'})
     assert response.status_code == 200
     l3s = session.query(Level2).filter_by(name='level2_2').one().level3s
