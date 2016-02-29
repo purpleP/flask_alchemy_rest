@@ -32,16 +32,16 @@ class Helper(object):
             join_attrs=(Level2, Level1, Root),
             attrs_to_filter=(Level2.name, Level1.name, Root.name),
             keys=(
-                '.root.0.level1.0.level2.0',
-                '.root.0.level1.0',
-                '.root.0',
+                'root_0_level1_0_level2_0',
+                'root_0_level1_0',
+                'root_0',
             )
         ),
         lambda roots: [
             l3
-            for r in roots if r.name == '.root.0'
-            for l1 in r.level1s if l1.name == '.root.0.level1.0'
-            for l2 in l1.level2s if l2.name == '.root.0.level1.0.level2.0'
+            for r in roots if r.name == 'root_0'
+            for l1 in r.level1s if l1.name == 'root_0_level1_0'
+            for l2 in l1.level2s if l2.name == 'root_0_level1_0_level2_0'
             for l3 in l2.level3s
         ]
     ),
@@ -53,19 +53,19 @@ class Helper(object):
             join_attrs=(Level2, Level1, Root),
             attrs_to_filter=(Level3.name, Level2.name, Level1.name, Root.name),
             keys=(
-                '.root.0.level1.0.level2.0.level3.0',
-                '.root.0.level1.0.level2.0',
-                '.root.0.level1.0',
-                '.root.0',
+                'root_0_level1_0_level2_0_level3_0',
+                'root_0_level1_0_level2_0',
+                'root_0_level1_0',
+                'root_0',
             )
         ),
         lambda roots: [
             l3
-            for r in roots if r.name == '.root.0'
-            for l1 in r.level1s if l1.name == '.root.0.level1.0'
-            for l2 in l1.level2s if l2.name == '.root.0.level1.0.level2.0'
+            for r in roots if r.name == 'root_0'
+            for l1 in r.level1s if l1.name == 'root_0_level1_0'
+            for l2 in l1.level2s if l2.name == 'root_0_level1_0_level2_0'
             for l3 in l2.level3s
-            if l3.name == '.root.0.level1.0.level2.0.level3.0'
+            if l3.name == 'root_0_level1_0_level2_0_level3_0'
         ]
     ),
     (
@@ -76,14 +76,14 @@ class Helper(object):
             join_attrs=(Parent.children,),
             attrs_to_filter=(Parent.name,),
             keys=(
-                '.pseudoroot.0.parent.0',
-                '.pseudoroot.0',
+                'pseudoroot_0_parent_0',
+                'pseudoroot_0',
             )
         ),
         lambda roots: [
             child
-            for r in roots if r.name == '.pseudoroot.0'
-            for p in r.parents if p.name == '.pseudoroot.0.parent.0'
+            for r in roots if r.name == 'pseudoroot_0'
+            for p in r.parents if p.name == 'pseudoroot_0_parent_0'
             for child in p.children
         ]
     ),

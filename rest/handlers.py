@@ -8,9 +8,6 @@ from marshmallow_sqlalchemy import ModelSchema
 from sqlalchemy.orm.exc import NoResultFound
 
 
-def handler(data_source, *keys, **kwargs)
-    pass
-
 def get_collection(db_session, query, serializer, *keys, **kwargs):
     spec = kwargs.get('spec', lambda x: x)
     from_ = kwargs.get('from_', None)
@@ -79,9 +76,12 @@ def post_item_many_to_many(db_session, item_query, parent_query, rel_attr_name,
 
 
 def delete_item(db_session, query, *keys):
-    db_session.delete(query(session=db_session, keys=keys).one())
-    db_session.commit()
-    return '', 200
+    try:
+        db_session.delete(query(session=db_session, keys=keys).one())
+        db_session.commit()
+        return '', 200
+    except NoResultFound:
+        return 'No such resource', 404
 
 
 def delete_many_to_many(db_session, item_query, parent_query, rel_attr_name, *keys):

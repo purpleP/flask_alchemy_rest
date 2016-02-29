@@ -143,14 +143,14 @@ def session():
     return session
 
 
-def hierarchy_full_data(session):
-    items = make_items(hierarchy_graph(), Root)
+def hierarchy_full_data(session, count=2):
+    items = make_items(hierarchy_graph(), Root, count=count)
     for i in items:
         session.add(i)
     return items
 
 
-def circular_full_data(session):
+def circular_full_data(session, count=2):
     class PseudoRoot(object):
         def __init__(self, name):
             self.name = name
@@ -160,26 +160,25 @@ def circular_full_data(session):
     g = cyclic_graph()
     g.add_edge(PseudoRoot, Parent, rel_attr='parents')
     g.add_edge(PseudoRoot, Child, rel_attr='children')
-    items = make_items(g, PseudoRoot)
+    items = make_items(g, PseudoRoot, count=count)
     real_roots = chain.from_iterable(((i.parents + i.children) for i in items))
     for r in real_roots:
         session.add(r)
     return items
 
 
-def make_items(graph, model_class, parent_name=''):
-    count = 2
+def make_items(graph, model_class, parent_name=(), count=2, join_char='_'):
+    name_parts = parent_name + (model_class.__name__.lower(),)
+
     items = [model_class(
-        name='.'.join(
-            (parent_name, model_class.__name__.lower(), str(i))
-        )
+        name=join_char.join(chain(name_parts, (str(i),)))
     )
         for i in xrange(count)]
 
     one_to_many = [r for r in graph.successors_iter(model_class)
                    if (r, model_class) not in graph.edges()]
 
-    rel_items = [(i, rel,  make_items(graph, rel, i.name))
+    rel_items = [(i, rel,  make_items(graph, rel, (i.name, ), count))
                  for i in items for rel in one_to_many]
 
     for i, rel, items_ in rel_items:
@@ -192,7 +191,7 @@ def make_items(graph, model_class, parent_name=''):
                     if i1 == i2 and (from_rel, to_rel) in graph.edges()]
 
     def by_counter(rel_item):
-        return rel_item.name.split('.')[-1]
+        return rel_item.name.split(join_char)[-1]
 
     sorter = partial(sorted, key=by_counter)
 
