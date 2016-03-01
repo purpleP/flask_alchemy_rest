@@ -2,7 +2,8 @@ import networkx as nx
 from itertools import izip, imap, chain
 from functools import partial
 from pytest import fixture
-from rest.helpers import tails
+from rest.helpers import tails, add_item
+from rest.handlers import serialize_item, create_schema
 from sqlalchemy import (
     Column,
     ForeignKey,
@@ -15,6 +16,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.orm.base import MANYTOMANY, ONETOMANY
 from sqlalchemy.pool import StaticPool
+import json
 
 ModelBase = declarative_base()
 
@@ -28,9 +30,9 @@ class EqualByName(object):
 
 class DictRepr(object):
     def __repr__(self):
-        return self.__class__.__name__ + 'with' + '\n'.join(
-            ('{} - {}'.format(k, str(v)) for k, v in self.__dict__.iteritems())
-        )
+        as_dict = serialize_item(create_schema(self.__class__)(), self)
+        as_dict['__class__'] = str(self.__class__)
+        return json.dumps(as_dict)
 
 
 class Root(ModelBase, EqualByName, DictRepr):
@@ -45,9 +47,6 @@ class Level1(ModelBase, EqualByName, DictRepr):
     root_pk = Column(String, ForeignKey('roots.name'))
     level2s = relationship('Level2')
 
-    def __repr__(self):
-        return 'Level1 named {}'.format(self.name)
-
 
 class Level2(ModelBase, EqualByName, DictRepr):
     __tablename__ = 'level2s'
@@ -55,20 +54,18 @@ class Level2(ModelBase, EqualByName, DictRepr):
     level1_pk = Column(String, ForeignKey('level1s.name'))
     level3s = relationship('Level3')
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.name == other.name
 
-    def __repr__(self):
-        return 'Level2 named {}'.format(self.name)
+class Level3(ModelBase, EqualByName, DictRepr):
+    __tablename__ = 'level3s'
+    name = Column(String, primary_key=True, nullable=False)
+    level2_pk = Column(String, ForeignKey('level2s.name'))
 
 
 association_table = Table(
-        'association',
-        ModelBase.metadata,
-        Column('parent_id', Integer, ForeignKey('parents.id')),
-        Column('child_id', Integer, ForeignKey('children.id'))
+    'association',
+    ModelBase.metadata,
+    Column('parent_id', Integer, ForeignKey('parents.id')),
+    Column('child_id', Integer, ForeignKey('children.id')),
 )
 
 
@@ -77,14 +74,11 @@ class Parent(ModelBase, EqualByName, DictRepr):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     children = relationship(
-            "Child",
-            secondary=association_table,
-            back_populates="parents")
-
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.name == other.name
+        "Child",
+        secondary=association_table,
+        back_populates="parents",
+        collection_class=set
+    )
 
 
 class Child(ModelBase, EqualByName, DictRepr):
@@ -92,15 +86,12 @@ class Child(ModelBase, EqualByName, DictRepr):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     parents = relationship(
-            "Parent",
-            secondary=association_table,
-            back_populates="children")
+        "Parent",
+        secondary=association_table,
+        back_populates="children",
+        collection_class=set
+    )
     grandchildren = relationship('Grandchild')
-
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.name == other.name
 
 
 class Grandchild(ModelBase, EqualByName, DictRepr):
@@ -109,34 +100,15 @@ class Grandchild(ModelBase, EqualByName, DictRepr):
     child_id = Column(Integer, ForeignKey('children.id'))
     name = Column(String, nullable=False)
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.name == other.name
-
-
-class Level3(ModelBase, EqualByName, DictRepr):
-    __tablename__ = 'level3s'
-    name = Column(String, primary_key=True, nullable=False)
-    level2_pk = Column(String, ForeignKey('level2s.name'))
-
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.name == other.name
-
-    def __repr__(self):
-        return 'Level3 named {}'.format(self.name)
-
 
 @fixture()
 def session():
     engine = create_engine(
-            'sqlite://',
-            echo=False,
-            convert_unicode=True,
-            connect_args={'check_same_thread': False},
-            poolclass=StaticPool,
+        'sqlite://',
+        echo=False,
+        convert_unicode=True,
+        connect_args={'check_same_thread': False},
+        poolclass=StaticPool,
     )
     session = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
     ModelBase.metadata.create_all(engine)
@@ -198,15 +170,15 @@ def make_items(graph, model_class, parent_name=(), count=2, join_char='_'):
     for item, from_rel, to_rel, iss in many_to_many:
         rel_attr = graph[from_rel][to_rel]['rel_attr']
         for from_item, to_item in izip(*imap(sorter, iss)):
-            getattr(from_item, rel_attr).append(to_item)
+            add_item(from_item, rel_attr, to_item)
 
     return items
 
 
 level3_item_rule = '/roots/<level_0_id>/level1s/<level_1_id>/level2s/' \
-                   '<level_2_id>/level3s/<level_3_id>'
+        '<level_2_id>/level3s/<level_3_id>'
 level3_collection_rule = '/roots/<level_0_id>/level1s/<level_1_id>/level2s/' \
-                         '<level_2_id>/level3s'
+        '<level_2_id>/level3s'
 config = {
     Root: {
         'exposed_attr': 'name',

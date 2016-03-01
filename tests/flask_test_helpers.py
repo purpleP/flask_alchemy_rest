@@ -6,12 +6,24 @@ def get_json(test_client, url, query_dict=None):
 
 
 def patch(test_client, url, data):
-    return test_client.patch(url, data=json.dumps(data), content_type='application/json')
+    return test_client.patch(
+        url,
+        data=json.dumps(data),
+        content_type='application/json'
+    )
 
 
 def post_json(test_client, url, data):
-    return test_client.post(url, data=json.dumps(data), content_type='application/json')
+    return test_client.post(
+        url,
+        data=json.dumps(data),
+        content_type='application/json'
+    )
 
 
 def put_json(test_client, url, data):
-    return test_client.put(url, data=json.dumps(data), content_type='application/json')
+    return test_client.put(
+        url,
+        data=json.dumps(data),
+        content_type='application/json'
+    )

@@ -69,3 +69,11 @@ def merge(d1, d2, path=[]):
         else:
             d1[k] = d2v
     return d1
+
+
+def add_item(obj, attr, item):
+    collection = getattr(obj, attr)
+    if isinstance(collection, list):
+        collection.append(item)
+    elif isinstance(collection, set):
+        collection.add(item)

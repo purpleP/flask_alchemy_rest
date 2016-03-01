@@ -1,7 +1,7 @@
 import json
 
 from functools import partial
-from helpers import compose
+from helpers import compose, add_item
 
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
@@ -68,10 +68,10 @@ def post_item_many_to_many(db_session, item_query, parent_query, rel_attr_name,
         item = item_query(session=db_session, keys=(_id,)).one()
         parent = parent_query(session=db_session, keys=keys).one()
         db_session.add(parent)
-        getattr(parent, rel_attr_name).append(item)
+        add_item(parent, rel_attr_name, item)
         db_session.commit()
         return '', 200
-    except NoResultFound as e:
+    except NoResultFound:
         return 'Parent resource not found', 404
 
 
@@ -85,12 +85,15 @@ def delete_item(db_session, query, *keys):
 
 
 def delete_many_to_many(db_session, item_query, parent_query, rel_attr_name, *keys):
-    item = item_query(session=db_session, keys=keys[0:1]).one()
-    parent = parent_query(session=db_session, keys=keys[1:]).one()
-    db_session.add(parent)
-    getattr(parent, rel_attr_name).remove(item)
-    db_session.commit()
-    return '', 200
+    try:
+        item = item_query(session=db_session, keys=keys[0:1]).one()
+        parent = parent_query(session=db_session, keys=keys[1:]).one()
+        db_session.add(parent)
+        getattr(parent, rel_attr_name).remove(item)
+        db_session.commit()
+        return '', 200
+    except NoResultFound:
+        return 'No such resource', 404
 
 
 def patch_item(db_session, query, *keys, **kwargs):
@@ -200,4 +203,3 @@ def create_schema(model_class, meta_dict={}):
             (ModelSchema,),
             {'Meta': schema_meta}
     )
-
