@@ -19,7 +19,7 @@ def wrapper_id(*args, **kwargs):
     return args, kwargs
 
 
-def compose(*wrappers):
+def compose_wrappers(*wrappers):
     def l(f, g):
         def l2(*args, **kwargs):
             a, kw = g(*args, **kwargs)
@@ -27,6 +27,10 @@ def compose(*wrappers):
         return l2
 
     return reduce(l, wrappers, wrapper_id)
+
+
+def compose(*functions):
+    return reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)
 
 
 def concat_(seqs):

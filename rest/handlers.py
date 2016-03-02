@@ -1,11 +1,14 @@
 import json
 
 from functools import partial
-from helpers import compose, add_item
+from helpers import compose_wrappers, add_item
 
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
 from sqlalchemy.orm.exc import NoResultFound
+
+NO_SUCH_ITEM_MESSAGE = 'No such item to add'
+NO_SUCH_PARENT_MESSAGE = 'No such parent resource to add to'
 
 
 def get_collection(db_session, query, serializer, *keys, **kwargs):
@@ -58,7 +61,7 @@ def root_adder(db_session, item, *keys):
 def non_root_adder(query, rel_attr_name, db_session, item, *keys):
     parent = query(session=db_session, keys=keys).one()
     db_session.add(parent)
-    getattr(parent, rel_attr_name).append(item)
+    add_item(parent, rel_attr_name, item)
 
 
 def post_item_many_to_many(db_session, item_query, parent_query, rel_attr_name,
@@ -66,13 +69,17 @@ def post_item_many_to_many(db_session, item_query, parent_query, rel_attr_name,
     try:
         _id = kwargs.pop('data')['id']
         item = item_query(session=db_session, keys=(_id,)).one()
-        parent = parent_query(session=db_session, keys=keys).one()
-        db_session.add(parent)
-        add_item(parent, rel_attr_name, item)
-        db_session.commit()
-        return '', 200
     except NoResultFound:
-        return 'Parent resource not found', 404
+        return NO_SUCH_ITEM_MESSAGE, 404
+    else:
+        try:
+            parent = parent_query(session=db_session, keys=keys).one()
+            db_session.add(parent)
+            add_item(parent, rel_attr_name, item)
+            db_session.commit()
+            return '', 200
+        except NoResultFound:
+            return NO_SUCH_PARENT_MESSAGE, 404
 
 
 def delete_item(db_session, query, *keys):
@@ -84,7 +91,8 @@ def delete_item(db_session, query, *keys):
         return 'No such resource', 404
 
 
-def delete_many_to_many(db_session, item_query, parent_query, rel_attr_name, *keys):
+def delete_many_to_many(db_session, item_query, parent_query,
+                        rel_attr_name, *keys):
     try:
         item = item_query(session=db_session, keys=keys[0:1]).one()
         parent = parent_query(session=db_session, keys=keys[1:]).one()
@@ -150,7 +158,7 @@ def request_data_wrapper(*args, **kwargs):
 
 
 def get_handler(handler, specs={}):
-    w = compose(
+    w = compose_wrappers(
         partial(spec_wrapper, specs),
         cursor_wrapper,
         keys_wrapper,
@@ -159,7 +167,7 @@ def get_handler(handler, specs={}):
 
 
 def data_handler(handler):
-    w = compose(request_data_wrapper, keys_wrapper)
+    w = compose_wrappers(request_data_wrapper, keys_wrapper)
     return wrap(handler, w)
 
 

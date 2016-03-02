@@ -2,7 +2,7 @@ from itertools import izip
 from functools import partial
 
 
-def query(session, model_to_query, join_attrs, attrs_to_filter, keys):
+def query(session, model_to_query, attrs_to_filter, keys, join_attrs=()):
 
     def f(query, query_modifier):
         return query_modifier(query)

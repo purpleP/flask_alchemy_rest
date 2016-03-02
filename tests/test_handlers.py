@@ -15,14 +15,17 @@ from rest.handlers import (
     data_handler,
     get_item,
     post_item,
+    patch_item,
     post_item_many_to_many,
     root_adder,
     non_root_adder,
     serialize_collection,
     deserialize_item,
     serialize_item,
+    NO_SUCH_ITEM_MESSAGE,
+    NO_SUCH_PARENT_MESSAGE,
 )
-from tests.flask_test_helpers import post_json
+from tests.flask_test_helpers import post_json, patch
 from rest.helpers import inits
 from rest.query import query
 from tests.fixtures import (
@@ -141,16 +144,13 @@ def l3_post_item_handler_maker(session):
 parent_query = partial(
     query,
     model_to_query=Parent,
-    join_attrs=(Parent,),
-    attrs_to_filter=(Parent.name)
+    attrs_to_filter=(Parent.name,)
 )
 
 child_query = partial(
     query,
     model_to_query=Child,
-    attrs_to_filter=(
-        Child.name,
-    )
+    attrs_to_filter=(Child.name,)
 )
 
 
@@ -223,10 +223,26 @@ def l3_item_handler_maker(session):
     )
 
 
+def l3_item_patch_handler_maker(session):
+    return data_handler(
+        partial(
+            patch_item,
+            session,
+            l3_query,
+        )
+    )
+
+
 l3_item_params = (
     level3_item_rule,
     l3_item_handler_maker,
     ['GET']
+)
+
+l3_patch_item_params = (
+    level3_item_rule,
+    l3_item_patch_handler_maker,
+    ['PATCH']
 )
 
 
@@ -246,7 +262,7 @@ l3_delete_params = (
     ['DELETE']
 )
 
-child_query = partial(
+delete_child_query = partial(
     query,
     model_to_query=Child,
     join_attrs=(Child, Parent.children),
@@ -256,7 +272,7 @@ child_query = partial(
     )
 )
 
-parent_query = partial(
+delete_parent_query = partial(
     query,
     model_to_query=Parent,
     join_attrs=(Parent, Child.parents),
@@ -271,8 +287,8 @@ def child_delete_handler_maker(session):
         partial(
             delete_many_to_many,
             session,
-            child_query,
-            parent_query,
+            delete_child_query,
+            delete_parent_query,
             'children'
         )
     )
@@ -296,20 +312,35 @@ def delete(client, url, *args, **kwargs):
 def check_if_deleted(state, _id):
     assert state.session \
                .query(Level3) \
-               .filter(Level3.name.in_((_id,))).all() == []
+               .filter(Level3.name.in_((_id,))).count() == 0
 
 
 def check_if_many_to_many_deleted(state, parent_id, child_id):
     assert state.session.query(Child) \
                .join(Child, Parent.children) \
                .filter(Parent.name == parent_id) \
-               .filter(Child.name == child_id).all() == []
+               .filter(Child.name == child_id).count() == 0
 
 
-@pytest.mark.parametrize('state,req,status_code,correct_data,state_checker', [
+def patch_state_checker(state):
+    assert state.session.query(Level3) \
+               .filter_by(name='super_new_name') \
+               .count() == 1
+
+
+def dict_response_checker(response, correct_data):
+    assert json.loads(response.data) == correct_data
+
+
+def raw_response_checker(response, correct_data):
+    assert response.data == correct_data
+
+
+@pytest.mark.parametrize('state,req,status_code,\
+                         response_checker,state_checker', [
     (
-        client(l3_collection_params, hierarchy_full_data),
-        partial(
+            client(l3_collection_params, hierarchy_full_data),
+            partial(
             get,
             url=make_url(
                 collection_names=(
@@ -317,18 +348,21 @@ def check_if_many_to_many_deleted(state, parent_id, child_id):
                 item_names=('root_1', 'level1_1', 'level2_1')
             )
         ),
-        200,
-        {
-            'items': [
-                {'name': 'root_1_level1_1_level2_1_level3_0'},
-                {'name': 'root_1_level1_1_level2_1_level3_1'},
-            ]
-        },
-        None
+            200,
+            partial(
+                dict_response_checker,
+                correct_data={
+                    'items': [
+                        {'name': 'root_1_level1_1_level2_1_level3_0'},
+                        {'name': 'root_1_level1_1_level2_1_level3_1'},
+                    ]
+                }
+            ),
+            None
     ),
     (
-        client(l3_item_params, hierarchy_full_data),
-        partial(
+            client(l3_item_params, hierarchy_full_data),
+            partial(
             get,
             url=make_url(
                 collection_names=(
@@ -336,9 +370,12 @@ def check_if_many_to_many_deleted(state, parent_id, child_id):
                 item_names=('root_1', 'level1_1', 'level2_1', 'level3_0')
             )
         ),
-        200,
-        {'name': 'root_1_level1_1_level2_1_level3_0'},
-        None
+            200,
+            partial(
+                dict_response_checker,
+                correct_data={'name': 'root_1_level1_1_level2_1_level3_0'},
+            ),
+            None
     ),
     (
         client(l3_item_params, hierarchy_full_data),
@@ -397,21 +434,24 @@ def check_if_many_to_many_deleted(state, parent_id, child_id):
         )
     ),
     (
-        client(root_post_params, hierarchy_full_data),
-        partial(
+            client(root_post_params, hierarchy_full_data),
+            partial(
             post_json,
             url='/roots',
             data={'name': 'root_2'},
         ),
-        200,
-        {'id': 'root_2'},
-        partial(post_state_checker,
+            200,
+            partial(
+                dict_response_checker,
+                correct_data={'id': 'root_2'}
+            ),
+            partial(post_state_checker,
                 model=Root,
                 name_='root_2')
     ),
     (
-        client(l3_post_params, hierarchy_full_data),
-        partial(
+            client(l3_post_params, hierarchy_full_data),
+            partial(
             post_json,
             url=make_url(
                 collection_names=(
@@ -420,9 +460,12 @@ def check_if_many_to_many_deleted(state, parent_id, child_id):
             ),
             data={'name': 'root_1_level1_1_level2_1_level3_2'},
         ),
-        200,
-        {'id': 'root_1_level1_1_level2_1_level3_2'},
-        partial(post_state_checker,
+            200,
+            partial(
+                dict_response_checker,
+                correct_data={'id': 'root_1_level1_1_level2_1_level3_2'}
+            ),
+            partial(post_state_checker,
                 model=Level3,
                 name_='root_1_level1_1_level2_1_level3_2')
     ),
@@ -437,18 +480,53 @@ def check_if_many_to_many_deleted(state, parent_id, child_id):
         None,
         post_many_to_many_checker
     ),
+    (
+            client(post_many_to_many_params, circular_full_data),
+            partial(
+                post_json,
+                url='/parents/pseudoroot_1_parent_2/children',
+                data={'id': 'pseudoroot_1_child_0'}
+            ),
+            404,
+            partial(raw_response_checker, correct_data=NO_SUCH_PARENT_MESSAGE),
+            None
+    ),
+    (
+            client(post_many_to_many_params, circular_full_data),
+            partial(
+                post_json,
+                url='/parents/pseudoroot_1_parent_1/children',
+                data={'id': 'pseudoroot_1_child_2'}
+            ),
+            404,
+            partial(raw_response_checker, correct_data=NO_SUCH_ITEM_MESSAGE),
+            None
+    ),
+    (
+            client(l3_patch_item_params, hierarchy_full_data),
+            partial(
+                patch,
+                url=make_url(
+                    collection_names=(
+                            'roots', 'level1s', 'level2s', 'level3s'),
+                    item_names=('root_1', 'level1_1', 'level2_1', 'level3_0')
+                ),
+                data={'name': 'super_new_name'}
+            ),
+            200,
+            None,
+            patch_state_checker,
+    ),
 ])
-def test_handler(state, req, status_code, correct_data, state_checker):
+def test_handler(state, req, status_code, response_checker, state_checker):
     response = req(state.client)
     assert response.status_code == status_code
-    if correct_data:
-        assert json.loads(response.data) == correct_data
+    if response_checker:
+        response_checker(response)
     if state_checker is not None:
         state_checker(state=state)
 
 # TODO test_patch
-# TODO test post many_to_many and non root
-# for correct error if nothing is found
 
     # def test_patch(session):
     # c = client(
@@ -469,4 +547,5 @@ def test_handler(state, req, status_code, correct_data, state_checker):
     # l3s = session.query(Level3).filter_by(name='level3_1').all()
     # assert len(l3s) == 0
     # l3s = session.query(Level3).filter_by(name='l3_new_name').all()
+
     # assert len(l3s) == 1

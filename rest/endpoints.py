@@ -1,7 +1,7 @@
 from collections import defaultdict, namedtuple
 from copy import deepcopy
 from functools import partial
-from itertools import chain
+from itertools import chain, izip
 
 from rest.handlers import (
     create_handler,
@@ -25,7 +25,7 @@ from rest.handlers import (
 from rest.helpers import identity, list_dict
 from rest.hierarchy_traverser import all_paths, create_graph
 from rest.introspect import pk_attr_name
-from rest.query import filter_, join, query
+from rest.query import query
 from rest.schema import to_jsonschema
 from sqlalchemy.orm.base import MANYTOMANY
 
@@ -107,31 +107,21 @@ def is_many_to_many(graph, model, parent):
             graph[model][parent]['rel_type'] == MANYTOMANY)
 
 
-def create_query_modifiers(graph, config, ch_m, p_m):
-    im = partial(filter_, getattr(ch_m, config[ch_m]['exposed_attr']))
-    if is_many_to_many(graph, ch_m, p_m):
-        jm = partial(join, p_m, graph[ch_m][p_m]['rel_attr'])
-        return im, jm
-    else:
-        return im,
-
-
-def query_modifiers_for_path(graph, config, path):
-    return tuple((create_query_modifiers(graph, config, ch_m, p_m)
-                  for ch_m, p_m in zip(path, path[1:])))
-
-
 def apis_for_path(path, config, db_session, graph):
-    col_rule, item_rule = url_rules_for_path(path[1:], config)
+    col_rule, item_rule = url_rules_for_path(path[1:], config, graph)
     model = path[-1]
     parent = path[-2]
 
-    ps = list(reversed(path))
-    query_modifiers = query_modifiers_for_path(graph, config, ps)
+    ps = [m for m in reversed(path) if m is not None]
+
+    attrs_to_filter = tuple((getattr(m, config[m]['exposed_attr'])
+                             for m in ps))
+
     q = partial(
         query,
         model_to_query=model,
-        query_modifiers=query_modifiers,
+        join_attrs=ps[1:],
+        attrs_to_filter=attrs_to_filter[1:]
     )
     model_config = config[model]
     endpoints = defaultdict(dict)
@@ -165,18 +155,13 @@ def apis_for_path(path, config, db_session, graph):
         item_query = partial(
             query,
             model_to_query=model,
-            query_modifiers=(
-                (
-                    partial(filter_, getattr(model,
-                                             model_config[
-                                                 'exposed_attr'])),
-                ),
-            )
+            attrs_to_filter=attrs_to_filter[0],
         )
         parent_query = partial(
             query,
             model_to_query=parent,
-            query_modifiers=query_modifiers[1:]
+            join_attrs=ps[2:],
+            attrs_to_filter=attrs_to_filter[1:]
         )
         if is_many_to_many(graph, model, parent):
             h = partial(
@@ -212,7 +197,12 @@ def apis_for_path(path, config, db_session, graph):
             partial(
                 get_item,
                 db_session,
-                q,
+                partial(
+                    query,
+                    model_to_query=model,
+                    join_attrs=ps[1:],
+                    attrs_to_filter=attrs_to_filter,
+                ),
                 model_config['item_serializer']
             )
         )
@@ -312,13 +302,19 @@ def default_cfg_for_model(model, db_session):
     }
 
 
-def url_rules_for_path(path, config):
-    url_parts = [''] + list(chain(
-        *[[config[model]['url_name'],
-           '<{}level_{}_id>'.format(config[model]['exposed_attr_type'], i)]
-          for i, model in enumerate(path)]
+def url_rules_for_path(path, config, graph):
+    model = path[0]
+    url_names = chain(
+        (config[model]['url_name'],),
+        (graph[m1][m2]['rel_attr'] for m1, m2 in izip(path[0:], path[1:]))
     )
+    patterns = ['<{}level_{}_id>'.format(config[model]['exposed_attr_type'], i)
+                for i, m in enumerate(path)]
+    np = zip(url_names, patterns)
+    item_url_rule = '/'.join(
+        chain([''], chain.from_iterable(np))
     )
-    collection_resource_url = '/'.join(url_parts[:-1])
-    item_resource_url = '/'.join(url_parts)
-    return collection_resource_url, item_resource_url
+    collection_url_rule = '/'.join(
+        chain([''], chain.from_iterable(np[:-1]), [np[-1][0]])
+    )
+    return collection_url_rule, item_url_rule
