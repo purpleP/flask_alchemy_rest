@@ -2,6 +2,7 @@ import json
 
 from flask import Flask
 from functools import reduce
+from itertools import permutations
 from pytest import fixture
 import pytest
 from rest.endpoints import (
@@ -210,6 +211,8 @@ def check_endpoint(client, url, schemas, model=None, base_name=None):
         )
         check_if_uploaded(client, ids_to_items, url)
     else:
+        import pdb
+        pdb.set_trace()
         links = [l for s in schemas.values() for l in s['links']
                  if l['rel'] == 'self']
         simple_links = links
@@ -228,11 +231,13 @@ def check_endpoint(client, url, schemas, model=None, base_name=None):
     )
         for l in simple_links]
 
-    linked_models = [l['schema_key'] for l in simple_links]
-
-    link_pairs = [(lm, l1) for lm in simple_links
-                  for l1 in schemas[lm['schema_key']]['links']
-                  if l1['schema_key'] in linked_models and l1 != lm]
+    link_pairs = [
+        (l1, l2) for l1, l2 in permutations(simple_links, 2)
+        if l2['schema_key'] in [
+            l['schema_key'] for l
+            in schemas[l1['schema_key']]['links']
+        ]
+    ]
 
     many_to_many_data = [
         (

@@ -42,15 +42,8 @@ def schema():
     }
 
 
-def schema_without_requited():
-    s = schema()
-    s['required'] = []
-    return s
-
-
 @pytest.mark.parametrize('schema', [
     schema(),
-    schema_without_requited(),
 ])
 def test_generator(schema):
     try:
