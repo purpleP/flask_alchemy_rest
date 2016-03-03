@@ -7,8 +7,9 @@ from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
 from sqlalchemy.orm.exc import NoResultFound
 
-NO_SUCH_ITEM_MESSAGE = 'No such item to add'
-NO_SUCH_PARENT_MESSAGE = 'No such parent resource to add to'
+NO_SUCH_ITEM_MESSAGE = 'No such item resourse'
+NO_SUCH_PARENT_MESSAGE = 'No such parent resource'
+NO_SUCH_RESOURCE_MESSAGE = 'No such resource'
 
 
 def get_collection(db_session, query, serializer, *keys, **kwargs):
@@ -39,7 +40,7 @@ def get_item(db_session, query, serializer, *keys):
         item = item_query.one()
         return jsonify(serializer(item))
     except NoResultFound:
-        return 'No such resource', 404
+        return NO_SUCH_RESOURCE_MESSAGE, 404
 
 
 def post_item(db_session, exposed_attr, adder, deserializer, *keys, **kwargs):
@@ -88,20 +89,24 @@ def delete_item(db_session, query, *keys):
         db_session.commit()
         return '', 200
     except NoResultFound:
-        return 'No such resource', 404
+        return NO_SUCH_RESOURCE_MESSAGE, 404
 
 
 def delete_many_to_many(db_session, item_query, parent_query,
                         rel_attr_name, *keys):
     try:
         item = item_query(session=db_session, keys=keys[0:1]).one()
-        parent = parent_query(session=db_session, keys=keys[1:]).one()
-        db_session.add(parent)
-        getattr(parent, rel_attr_name).remove(item)
-        db_session.commit()
-        return '', 200
     except NoResultFound:
-        return 'No such resource', 404
+        return NO_SUCH_ITEM_MESSAGE, 404
+    else:
+        try:
+            parent = parent_query(session=db_session, keys=keys[1:]).one()
+            db_session.add(parent)
+            getattr(parent, rel_attr_name).remove(item)
+            db_session.commit()
+            return '', 200
+        except NoResultFound:
+            return NO_SUCH_PARENT_MESSAGE, 404
 
 
 def patch_item(db_session, query, *keys, **kwargs):
@@ -114,7 +119,7 @@ def patch_item(db_session, query, *keys, **kwargs):
         db_session.commit()
         return '', 200
     except NoResultFound:
-        return 'No such resource', 404
+        return NO_SUCH_RESOURCE_MESSAGE, 404
 
 
 def schemas_handler(schemas):

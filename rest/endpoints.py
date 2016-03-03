@@ -1,7 +1,7 @@
 from collections import defaultdict, namedtuple
 from copy import deepcopy
 from functools import partial
-from itertools import chain, izip
+from itertools import chain, izip, izip_longest
 
 from rest.handlers import (
     create_handler,
@@ -107,30 +107,45 @@ def is_many_to_many(graph, model, parent):
             graph[model][parent]['rel_type'] == MANYTOMANY)
 
 
+def join_on(graph, child, parent):
+    if parent and is_many_to_many(graph, child, parent):
+        rel_attr = graph[parent][child]['rel_attr']
+        return getattr(parent, rel_attr)
+    else:
+        return parent
+
+
 def apis_for_path(path, config, db_session, graph):
     col_rule, item_rule = url_rules_for_path(path[1:], config, graph)
     model = path[-1]
     parent = path[-2]
+    model_config = config[model]
+    endpoints = defaultdict(dict)
 
     ps = [m for m in reversed(path) if m is not None]
 
     attrs_to_filter = tuple((getattr(m, config[m]['exposed_attr'])
                              for m in ps))
 
-    q = partial(
+    join_attrs = [join_on(graph, ch, p) for ch, p in izip(ps, ps[1:])]
+    collection_query = partial(
         query,
         model_to_query=model,
-        join_attrs=ps[1:],
+        join_attrs=join_attrs,
         attrs_to_filter=attrs_to_filter[1:]
     )
-    model_config = config[model]
-    endpoints = defaultdict(dict)
+    item_query = partial(
+        query,
+        model_to_query=model,
+        join_attrs=join_attrs,
+        attrs_to_filter=attrs_to_filter,
+    )
     endpoints['collection']['GET'] = (
         col_rule, get_handler(
             partial(
                 get_collection,
                 db_session,
-                q,
+                collection_query,
                 model_config['collection_serializer'],
             ),
             model_config.get('specs', {})
@@ -147,36 +162,37 @@ def apis_for_path(path, config, db_session, graph):
     del_h = partial(
         delete_item,
         db_session,
-        q,
+        item_query,
     )
 
     if parent:
         rel_attr = graph[parent][model]['rel_attr']
-        item_query = partial(
+        child_query = partial(
             query,
             model_to_query=model,
-            attrs_to_filter=attrs_to_filter[0],
+            attrs_to_filter=attrs_to_filter[0:1],
         )
         parent_query = partial(
             query,
             model_to_query=parent,
-            join_attrs=ps[2:],
+            join_attrs=join_attrs[1:],
             attrs_to_filter=attrs_to_filter[1:]
         )
         if is_many_to_many(graph, model, parent):
             h = partial(
                 post_item_many_to_many,
                 db_session,
-                item_query,
+                child_query,
                 parent_query,
                 rel_attr,
             )
             del_h = partial(
                 delete_many_to_many,
                 db_session,
-                item_query,
+                child_query,
                 parent_query,
-                rel_attr)
+                rel_attr
+            )
         else:
             h = partial(
                 post_item,
@@ -197,12 +213,7 @@ def apis_for_path(path, config, db_session, graph):
             partial(
                 get_item,
                 db_session,
-                partial(
-                    query,
-                    model_to_query=model,
-                    join_attrs=ps[1:],
-                    attrs_to_filter=attrs_to_filter,
-                ),
+                item_query,
                 model_config['item_serializer']
             )
         )
@@ -212,7 +223,7 @@ def apis_for_path(path, config, db_session, graph):
             partial(
                 patch_item,
                 db_session,
-                q,
+                collection_query,
             )
         )
     )

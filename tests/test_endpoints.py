@@ -13,7 +13,11 @@ from rest.endpoints import (
     url_rules_for_path,
 )
 from rest.helpers import merge, compose, identity, find
-from rest.handlers import create_schema
+from rest.handlers import (
+    create_schema,
+    NO_SUCH_RESOURCE_MESSAGE,
+    NO_SUCH_ITEM_MESSAGE,
+)
 from rest.decorators import without_relations
 from rest.generators import object_
 from rest.schema import to_jsonschema
@@ -211,8 +215,6 @@ def check_endpoint(client, url, schemas, model=None, base_name=None):
         )
         check_if_uploaded(client, ids_to_items, url)
     else:
-        import pdb
-        pdb.set_trace()
         links = [l for s in schemas.values() for l in s['links']
                  if l['rel'] == 'self']
         simple_links = links
@@ -232,21 +234,69 @@ def check_endpoint(client, url, schemas, model=None, base_name=None):
         for l in simple_links]
 
     link_pairs = [
-        (l1, l2) for l1, l2 in permutations(simple_links, 2)
-        if l2['schema_key'] in [
-            l['schema_key'] for l
-            in schemas[l1['schema_key']]['links']
-        ]
+        (l1, l2, l1_link) for l1, l2 in permutations(simple_links, 2)
+        for l1_link in schemas[l1['schema_key']]['links']
+        if l2['schema_key'] == l1_link['schema_key']
     ]
 
     many_to_many_data = [
         (
-            lp1, find(lambda ld: ld[0] == lp1, next_level_data)[1],
-            lp2, find(lambda ld: ld[0] == lp2, next_level_data)[1],
+            l1, find(lambda ld: ld[0] == l1, next_level_data)[1],
+            l2, find(lambda ld: ld[0] == l2, next_level_data)[1],
+            l1_to_l2
         )
-        for lp1, lp2 in link_pairs]
+        for l1, l2, l1_to_l2 in link_pairs]
+
+    check_many_to_many_links(client, many_to_many_data, url)
+    remove_next_level_data(client, url, next_level_data)
 
     return ids_to_items
+
+
+def remove_next_level_data(client, url, next_level_data):
+    for link, data in next_level_data:
+        for _id, next_data in data.iteritems():
+            for next_id in next_data.keys():
+                collection_url = ''.join(
+                    (url, link['href'].format(id=_id))
+                )
+                item_url = '/'.join((collection_url, next_id))
+                response = client.delete(item_url)
+                assert response.status_code == 200
+                response = client.get(item_url)
+                assert response.status_code == 404
+                assert response.data == NO_SUCH_RESOURCE_MESSAGE
+
+
+def check_many_to_many_links(client, many_to_many_data, url):
+    for l1, d1, l2, d2, l1_to_l2 in many_to_many_data:
+        for _id, d1_next_data in d1.iteritems():
+            d2_next_data = d2[_id]
+            _ids = zip(d1_next_data.keys(), d2_next_data.keys())
+            for _id1, _id2 in _ids:
+                next_url = ''.join(
+                    (
+                        url,
+                        l1['href'].format(id=_id),
+                        l1_to_l2['href'].format(id=_id1)
+                    )
+                )
+                response = post_json(
+                    test_client=client,
+                    url=next_url,
+                    data={'id': _id2}
+                )
+                new_url = '/'.join((next_url, _id2))
+                assert response.status_code == 200
+                response = client.get(new_url)
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                dict_contains(data, d2_next_data[_id2])
+                response = client.delete(new_url)
+                assert response.status_code == 200
+                response = client.get(new_url)
+                assert response.status_code == 404
+                assert response.data == NO_SUCH_RESOURCE_MESSAGE
 
 
 def check_if_uploaded(client, items, url):

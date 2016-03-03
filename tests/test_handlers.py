@@ -24,6 +24,7 @@ from rest.handlers import (
     serialize_item,
     NO_SUCH_ITEM_MESSAGE,
     NO_SUCH_PARENT_MESSAGE,
+    NO_SUCH_RESOURCE_MESSAGE,
 )
 from tests.flask_test_helpers import post_json, patch
 from rest.helpers import inits
@@ -416,7 +417,7 @@ def raw_response_checker(response, correct_data):
             )
         ),
         404,
-        None,
+        partial(raw_response_checker, correct_data=NO_SUCH_RESOURCE_MESSAGE),
         None
     ),
     (
@@ -434,24 +435,44 @@ def raw_response_checker(response, correct_data):
         )
     ),
     (
-            client(root_post_params, hierarchy_full_data),
-            partial(
+        client(child_delete_params, circular_full_data),
+        partial(
+            delete,
+            url='/parents/pseudoroot_1_parent_1/children/pseudoroot_1_child_2'
+        ),
+        404,
+        partial(raw_response_checker, correct_data=NO_SUCH_ITEM_MESSAGE),
+        None
+    ),
+    (
+        client(child_delete_params, circular_full_data),
+        partial(
+            delete,
+            url='/parents/pseudoroot_1_parent_2/children/pseudoroot_1_child_1'
+        ),
+        404,
+        partial(raw_response_checker, correct_data=NO_SUCH_PARENT_MESSAGE),
+        None
+    ),
+    (
+        client(root_post_params, hierarchy_full_data),
+        partial(
             post_json,
             url='/roots',
             data={'name': 'root_2'},
         ),
-            200,
-            partial(
-                dict_response_checker,
-                correct_data={'id': 'root_2'}
-            ),
-            partial(post_state_checker,
+        200,
+        partial(
+            dict_response_checker,
+            correct_data={'id': 'root_2'}
+        ),
+        partial(post_state_checker,
                 model=Root,
                 name_='root_2')
     ),
     (
-            client(l3_post_params, hierarchy_full_data),
-            partial(
+        client(l3_post_params, hierarchy_full_data),
+        partial(
             post_json,
             url=make_url(
                 collection_names=(
@@ -460,12 +481,12 @@ def raw_response_checker(response, correct_data):
             ),
             data={'name': 'root_1_level1_1_level2_1_level3_2'},
         ),
-            200,
-            partial(
-                dict_response_checker,
-                correct_data={'id': 'root_1_level1_1_level2_1_level3_2'}
-            ),
-            partial(post_state_checker,
+        200,
+        partial(
+            dict_response_checker,
+            correct_data={'id': 'root_1_level1_1_level2_1_level3_2'}
+        ),
+        partial(post_state_checker,
                 model=Level3,
                 name_='root_1_level1_1_level2_1_level3_2')
     ),
