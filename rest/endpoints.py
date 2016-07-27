@@ -30,8 +30,7 @@ from rest.schema import to_jsonschema
 from sqlalchemy.orm.base import MANYTOMANY
 
 
-EndpointParams = namedtuple('EndpointParams',
-                            ['rule', 'endpoint', 'view_func', 'methods'])
+EndpointParams = namedtuple('EndpointParams', 'rule endpoint view_func methods')
 
 
 # This class could be used instead of dict to simplify testing a little
@@ -273,8 +272,10 @@ def create_api(root_model, db_session,
     config = config_decorator(default_config(graph.nodes(), db_session))
     ps = tuple(paths_decorator(all_paths(graph, root_model)))
     all_ps = tuple(reversed(ps))
-    apis = [apis_for_path((None,) + path, config, db_session, graph)
-            for path in all_ps]
+    apis = [
+        apis_for_path((None,) + path, config, db_session, graph)
+        for path in all_ps
+    ]
     apis_by_model = list_dict(apis)
     schemas = schemas_for_paths(ps, config, graph)
     return apis_by_model, schemas
@@ -300,7 +301,8 @@ def serializers_maker(model, schema_factory, db_session):
 
 def default_cfg_for_model(model, db_session):
     i_ser, col_ser, i_des = serializers_maker(
-        model, create_schema, db_session)
+        model, create_schema, db_session
+    )
     return {
         'url_name': model.__tablename__,
         'item_serializer': i_ser,
