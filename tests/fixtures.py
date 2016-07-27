@@ -1,5 +1,6 @@
 import networkx as nx
-from itertools import izip, imap, chain
+from itertools import chain
+from six.moves import zip, map, range
 from functools import partial
 from pytest import fixture
 from rest.helpers import tails, add_item
@@ -22,10 +23,11 @@ ModelBase = declarative_base()
 
 
 class EqualByName(object):
+    def __hash__(self):
+        return hash(self.name)
+
     def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.name == other.name
+        return isinstance(other, self.__class__) and self.name == other.name
 
 
 class DictRepr(object):
@@ -145,7 +147,7 @@ def make_items(graph, model_class, parent_name=(), count=2, join_char='_'):
     items = [model_class(
         name=join_char.join(chain(name_parts, (str(i),)))
     )
-        for i in xrange(count)]
+        for i in range(count)]
 
     one_to_many = [r for r in graph.successors_iter(model_class)
                    if (r, model_class) not in graph.edges()]
@@ -169,7 +171,7 @@ def make_items(graph, model_class, parent_name=(), count=2, join_char='_'):
 
     for item, from_rel, to_rel, iss in many_to_many:
         rel_attr = graph[from_rel][to_rel]['rel_attr']
-        for from_item, to_item in izip(*imap(sorter, iss)):
+        for from_item, to_item in zip(*map(sorter, iss)):
             add_item(from_item, rel_attr, to_item)
 
     return items

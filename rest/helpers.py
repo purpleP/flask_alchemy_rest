@@ -1,14 +1,16 @@
 from functools import reduce
 from collections import Mapping, defaultdict
 from operator import concat
+from six import iteritems
+from six.moves import range
 
 
 def inits(_list):
-    return [_list[:i] for i in xrange(len(_list) + 1)]
+    return tuple(_list[:i] for i in range(len(_list) + 1))
 
 
 def tails(_list):
-    return [_list[i:] for i in xrange(len(_list) + 1)]
+    return tuple(_list[i:] for i in range(len(_list) + 1))
 
 
 def identity(x):
@@ -59,7 +61,7 @@ def merge_list(l1, l2):
 
 
 def merge(d1, d2, path=[]):
-    for k, d2v in d2.iteritems():
+    for k, d2v in iteritems(d2):
         if k in d1:
             d1v = d1[k]
             if isinstance(d1v, Mapping) and isinstance(d2v, Mapping):

@@ -1,7 +1,8 @@
 from collections import defaultdict, namedtuple
 from copy import deepcopy
-from functools import partial
-from itertools import chain, izip, izip_longest
+from functools import partial, reduce
+from itertools import chain
+from six.moves import zip, zip_longest
 
 from rest.handlers import (
     create_handler,
@@ -28,6 +29,7 @@ from rest.introspect import pk_attr_name
 from rest.query import query
 from rest.schema import to_jsonschema
 from sqlalchemy.orm.base import MANYTOMANY
+from six import iteritems
 
 
 EndpointParams = namedtuple('EndpointParams', 'rule endpoint view_func methods')
@@ -59,7 +61,7 @@ def endpoints_params(endpoints):
     )
             for eps in endpoints
             for j in eps.values()
-            for method, rh in j.iteritems()]
+            for method, rh in iteritems(j)]
 
 
 def schemas_for_paths(paths, config, graph):
@@ -70,7 +72,7 @@ def schemas_for_paths(paths, config, graph):
     root = paths[0][0]
     print(root)
 
-    for m, s in schemas.iteritems():
+    for m, s in iteritems(schemas):
         s['links'] = reduce(
             partial(
                 make_link,
@@ -126,7 +128,7 @@ def apis_for_path(path, config, db_session, graph):
     attrs_to_filter = tuple((getattr(m, config[m]['exposed_attr'])
                              for m in ps))
 
-    join_attrs = [join_on(graph, ch, p) for ch, p in izip(ps, ps[1:])]
+    join_attrs = [join_on(graph, ch, p) for ch, p in zip(ps, ps[1:])]
     collection_query = partial(
         query,
         model_to_query=model,
@@ -256,7 +258,7 @@ def register_all_apis(app, schemas, all_apis):
             endpoint='schemas',
             view_func=partial(
                 schemas_handler,
-                {str(m): schema for m, schema in out_schemas.iteritems()}
+                {str(m): schema for m, schema in iteritems(out_schemas)}
             ),
             methods=['GET']
         )
@@ -319,11 +321,11 @@ def url_rules_for_path(path, config, graph):
     model = path[0]
     url_names = chain(
         (config[model]['url_name'],),
-        (graph[m1][m2]['rel_attr'] for m1, m2 in izip(path[0:], path[1:]))
+        (graph[m1][m2]['rel_attr'] for m1, m2 in zip(path[0:], path[1:]))
     )
     patterns = ['<{}level_{}_id>'.format(config[model]['exposed_attr_type'], i)
                 for i, m in enumerate(path)]
-    np = zip(url_names, patterns)
+    np = tuple(zip(url_names, patterns))
     item_url_rule = '/'.join(
         chain([''], chain.from_iterable(np))
     )

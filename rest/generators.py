@@ -5,6 +5,7 @@ from itertools import chain
 from rstr import rstr, xeger
 from functools import reduce
 from split import groupby
+from six import iteritems
 
 
 def number(schema):
@@ -36,7 +37,7 @@ def array(schema):
 def object_(schema):
     props = dict(groupby(
         lambda name_p: name_p[0] in schema['required'],
-        schema['properties'].iteritems()
+        iteritems(schema['properties'])
     ))
     included_non_required = ((name, p) for name, p in props.get(False, ())
                              if choice((True, False)))

@@ -9,10 +9,11 @@ from rest.handlers import (
     serialize_item,
 )
 from sqlalchemy.orm.base import MANYTOMANY, ONETOMANY, MANYTOONE
+from six import iteritems
 
 
 def without_relations(session, graph, config):
-    for m, conf in config.iteritems():
+    for m, conf in iteritems(config):
 
         def by_rel_type(acc, relation):
             rel_info = graph[m][relation]

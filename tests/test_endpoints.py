@@ -34,12 +34,14 @@ from tests.fixtures import (
     session,
 )
 from tests.flask_test_helpers import post_json
+from six import iteritems
 
 
 @fixture
 def app():
     app = Flask(__name__)
     app.debug = True
+    app.config['JSONIFY_MIMETYPE'] = 'application/json; charset=utf-8'
     return app
 
 
@@ -104,10 +106,10 @@ def test_schemas_for_paths(cyclic_graph):
         Grandchild: grandchild_hyper_schema,
     }
     schemas = schemas_for_paths(paths, config, cyclic_graph)
-    x = {m: links_to_tuple(s) for m, s in correct_schemas.iteritems()}
-    y = {m: links_to_tuple(s) for m, s in schemas.iteritems()}
+    x = {m: links_to_tuple(s) for m, s in iteritems(correct_schemas)}
+    y = {m: links_to_tuple(s) for m, s in iteritems(schemas)}
     for ss in (correct_schemas, schemas):
-        for m, s in ss.iteritems():
+        for m, s in iteritems(ss):
             del s['links']
     assert correct_schemas == schemas
     assert y == x
@@ -179,7 +181,7 @@ def test_api(schemas, client):
 
 
 def dict_contains(d1, d2):
-    for k, v in d2.iteritems():
+    for k, v in iteritems(d2):
         if k not in d1:
             return False
         else:
@@ -189,9 +191,9 @@ def dict_contains(d1, d2):
 
 
 def is_many_to_many(schemas, link, model):
-    return model in [
+    return model in (
         l['schema_key'] for l in schemas[link['schema_key']]['links']
-        ]
+    )
 
 
 def check_endpoint(client, url, schemas, model=None, base_name=None):
@@ -229,7 +231,7 @@ def check_endpoint(client, url, schemas, model=None, base_name=None):
             model=l['schema_key'],
             base_name=item['name']
         )
-         for _id, item in ids_to_items.iteritems()}
+         for _id, item in iteritems(ids_to_items)}
     )
         for l in simple_links]
 
@@ -255,7 +257,7 @@ def check_endpoint(client, url, schemas, model=None, base_name=None):
 
 def remove_next_level_data(client, url, next_level_data):
     for link, data in next_level_data:
-        for _id, next_data in data.iteritems():
+        for _id, next_data in iteritems(data):
             for next_id in next_data.keys():
                 collection_url = ''.join(
                     (url, link['href'].format(id=_id))
@@ -265,12 +267,12 @@ def remove_next_level_data(client, url, next_level_data):
                 assert response.status_code == 200
                 response = client.get(item_url)
                 assert response.status_code == 404
-                assert response.data == NO_SUCH_RESOURCE_MESSAGE
+                assert response.data.decode('utf-8') == NO_SUCH_RESOURCE_MESSAGE
 
 
 def check_many_to_many_links(client, many_to_many_data, url):
     for l1, d1, l2, d2, l1_to_l2 in many_to_many_data:
-        for _id, d1_next_data in d1.iteritems():
+        for _id, d1_next_data in iteritems(d1):
             d2_next_data = d2[_id]
             _ids = zip(d1_next_data.keys(), d2_next_data.keys())
             for _id1, _id2 in _ids:
@@ -290,29 +292,29 @@ def check_many_to_many_links(client, many_to_many_data, url):
                 assert response.status_code == 200
                 response = client.get(new_url)
                 assert response.status_code == 200
-                data = json.loads(response.data)
+                data = json.loads(response.data.decode('utf-8'))
                 dict_contains(data, d2_next_data[_id2])
                 response = client.delete(new_url)
                 assert response.status_code == 200
                 response = client.get(new_url)
                 assert response.status_code == 404
-                assert response.data == NO_SUCH_RESOURCE_MESSAGE
+                assert response.data.decode('utf-8') == NO_SUCH_RESOURCE_MESSAGE
 
 
 def check_if_uploaded(client, items, url):
     response = client.get(url)
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = json.loads(response.data.decode('utf-8'))
     assert 'items' in data
     assert len(data['items']) == len(items)
     is_uploaded = {_id: any([dict_contains(ri, i) for ri in data['items']])
-                   for _id, i in items.iteritems()}
+                   for _id, i in iteritems(items)}
     assert all(is_uploaded.values()) is True
     responses = [(item, client.get('/'.join((url, str(_id)))))
-                 for _id, item in items.iteritems()]
+                 for _id, item in iteritems(items)]
     is_oks = [r.status_code == 200 for i, r in responses]
     assert all(is_oks)
-    response_contains_item = [dict_contains(json.loads(r.data), i)
+    response_contains_item = [dict_contains(json.loads(r.data.decode('utf-8')), i)
                               for i, r in responses]
     assert all(response_contains_item)
 
@@ -334,7 +336,7 @@ def upload_random_data(client, items_to_upload_count, schema, url, base_name):
 def check_empty_collection(client, url):
     response = client.get(url)
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = json.loads(response.data.decode('utf-8'))
     assert 'items' in data
     assert len(data['items']) == 0
 
@@ -342,7 +344,7 @@ def check_empty_collection(client, url):
 def check_post_and_return_id(client, url, item):
     response = post_json(client, url, item)
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = json.loads(response.data.decode('utf-8'))
     assert 'id' in data
     return data['id']
 

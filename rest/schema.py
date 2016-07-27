@@ -1,6 +1,6 @@
 from inspect import getmro
 
-from helpers import find
+from rest.helpers import find
 from marshmallow.fields import (
     Boolean,
     DateTime,
@@ -15,6 +15,7 @@ from marshmallow.fields import (
     Email,
 )
 from marshmallow.validate import Length, OneOf, Range, Regexp
+from functools import reduce
 
 
 def to_jsonschema(mschema):

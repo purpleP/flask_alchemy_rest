@@ -1,5 +1,5 @@
-from itertools import izip
-from functools import partial
+from six.moves import zip
+from functools import partial, reduce
 
 
 def query(session, model_to_query, attrs_to_filter, keys, join_attrs=()):
@@ -13,7 +13,7 @@ def query(session, model_to_query, attrs_to_filter, keys, join_attrs=()):
         initial_query = initial_query.join(*join_attrs)
 
     query_modifiers = [partial(filter_, a, k)
-                       for a, k in izip(attrs_to_filter, keys)]
+                       for a, k in zip(attrs_to_filter, keys)]
 
     return reduce(f, query_modifiers, initial_query)
 

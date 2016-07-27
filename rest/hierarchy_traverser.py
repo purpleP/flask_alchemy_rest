@@ -1,8 +1,10 @@
 from collections import namedtuple
-from itertools import chain, groupby
-
+from itertools import chain
+from split import groupby
 from networkx import DiGraph, all_simple_paths
 from rest.introspect import related_models
+from six import iteritems
+from six.moves import map, filter
 
 ModelInfo = namedtuple('ModelInfo', 'model url_attr')
 
@@ -14,7 +16,7 @@ def create_graph(root_model):
 
 
 def add_model(graph, model):
-    for m, rel_info in related_models(model).iteritems():
+    for m, rel_info in iteritems(related_models(model)):
         graph.add_edge(
             model,
             m,
@@ -42,8 +44,9 @@ def _paths(g, n1, n2):
     if n1 == n2:
         return (n1,),
     else:
-        return all_simple_paths(g, n1, n2)
+        return map(tuple, all_simple_paths(g, n1, n2))
 
 
-def remove_duplicates(list_of_lists):
-    return (tuple(k) for k, _ in groupby(sorted(list_of_lists)))
+def remove_duplicates(seq):
+    seen = set()
+    return filter(lambda x: not (x in seen or seen.add(x)), seq)

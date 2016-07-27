@@ -9,5 +9,8 @@ setup(
         'flask',
         'sqlalchemy',
         'marshmallow',
+        'marshmallow_sqlalchemy',
+        'networkx',
+        'split',
     )
 )

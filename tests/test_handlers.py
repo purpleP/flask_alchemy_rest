@@ -1,7 +1,8 @@
 import json
 from collections import namedtuple
 from functools import partial
-from itertools import izip, chain
+from itertools import chain
+from six.moves import zip
 
 import pytest
 from flask import Flask
@@ -74,7 +75,7 @@ def search_dict(name):
 def make_url(collection_names, item_names):
     full_item_names = ('_'.join(ins) for ins in inits(item_names)[1:])
     url_parts = ('/'.join(pair)
-                 for pair in izip(collection_names, full_item_names))
+                 for pair in zip(collection_names, full_item_names))
     if len(collection_names) > len(item_names):
         full_parts = chain(('',), url_parts, (collection_names[-1],))
     else:
@@ -330,11 +331,11 @@ def patch_state_checker(state):
 
 
 def dict_response_checker(response, correct_data):
-    assert json.loads(response.data) == correct_data
+    assert json.loads(response.data.decode('utf-8')) == correct_data
 
 
 def raw_response_checker(response, correct_data):
-    assert response.data == correct_data
+    assert response.data.decode('utf-8') == correct_data
 
 
 @pytest.mark.parametrize('state,req,status_code,\

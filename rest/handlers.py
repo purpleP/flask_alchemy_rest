@@ -1,11 +1,12 @@
 import json
 
 from functools import partial
-from helpers import compose_wrappers, add_item
+from rest.helpers import compose_wrappers, add_item
 
 from flask import jsonify, request
 from marshmallow_sqlalchemy import ModelSchema
 from sqlalchemy.orm.exc import NoResultFound
+from six import iteritems
 
 NO_SUCH_ITEM_MESSAGE = 'No such item resourse'
 NO_SUCH_PARENT_MESSAGE = 'No such parent resource'
@@ -113,7 +114,7 @@ def patch_item(db_session, query, *keys, **kwargs):
     try:
         item = item_query.one()
         db_session.add(item)
-        for attr, new_value in kwargs.pop('data').iteritems():
+        for attr, new_value in iteritems(kwargs.pop('data')):
             setattr(item, attr, new_value)
         db_session.commit()
         return '', 200
@@ -157,7 +158,7 @@ def spec_wrapper(specs, *args, **kwargs):
 
 
 def request_data_wrapper(*args, **kwargs):
-    kwargs['data'] = json.loads(request.data)
+    kwargs['data'] = json.loads(request.data.decode('utf-8'))
     return args, kwargs
 
 

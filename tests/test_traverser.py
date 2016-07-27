@@ -6,6 +6,7 @@ from pytest import fixture
 from rest.helpers import inits
 from rest.hierarchy_traverser import all_paths, create_graph
 from tests.fixtures import Parent, Root, cyclic_graph, hierarchy_graph
+from six.moves import map
 
 
 @fixture
@@ -28,13 +29,13 @@ def graph_with_cycles(graph):
 
 
 def test_inits():
-    a = range(3)
-    correct_inits = [
-        [],
-        [0],
-        [0, 1],
-        [0, 1, 2],
-    ]
+    a = tuple(range(3))
+    correct_inits = (
+        (),
+        (0,),
+        (0, 1),
+        (0, 1, 2),
+    )
     assert inits(a) == correct_inits
 
 
