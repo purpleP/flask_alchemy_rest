@@ -12,5 +12,6 @@ setup(
         'marshmallow_sqlalchemy',
         'networkx',
         'split',
+        'six',
     )
 )
