@@ -30,6 +30,7 @@ from rest.query import query
 from rest.schema import to_jsonschema
 from sqlalchemy.orm.base import MANYTOMANY
 from six import iteritems
+from more_functools import dmap
 
 
 EndpointParams = namedtuple('EndpointParams', 'rule endpoint view_func methods')
@@ -248,17 +249,18 @@ def register_all_apis(app, schemas, all_apis):
         (api.values() for api in all_apis)
     )
     eps = endpoints_params(chain.from_iterable(endpoints))
-    out_schemas = deepcopy(schemas)
-    for schema in out_schemas.values():
-        for l in schema['links']:
-            l['schema_key'] = str(l['schema_key'])
+    def links_dest_as_str(links):
+        return tuple(map(lambda l: dmap(str, l, 'schema_key'), links))
     eps.append(
         EndpointParams(
             rule='/schemas',
             endpoint='schemas',
             view_func=partial(
                 schemas_handler,
-                {str(m): schema for m, schema in iteritems(out_schemas)}
+                {
+                    str(m): dmap(links_dest_as_str, schema, 'links',)
+                    for m, schema in iteritems(schemas)
+                }
             ),
             methods=['GET']
         )
