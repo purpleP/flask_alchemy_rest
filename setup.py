@@ -16,6 +16,6 @@ setup(
         'more_functools',
     ),
     dependency_links=(
-        'https://github.com/purpleP/more_functools/archive/master.zip#egg=more_functools-1.0',
+        'https://github.com/purpleP/more_functools/tarball/master#egg=more_functools-1.0',
     ),
 )

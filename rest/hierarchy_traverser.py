@@ -23,7 +23,7 @@ def add_model(graph, model):
             rel_attr=rel_info.attr,
             rel_type=rel_info.direction
         )
-        if (m, model) not in graph.edges():
+        if m not in graph.nodes() or len(graph[m]) == 1:
             add_model(graph, m)
 
 
