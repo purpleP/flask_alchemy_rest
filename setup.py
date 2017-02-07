@@ -13,5 +13,9 @@ setup(
         'networkx',
         'split',
         'six',
-    )
+        'more_functools',
+    ),
+    dependency_links=(
+        'https://github.com/purpleP/more_functools/archive/master.zip#egg=more_functools-1.0',
+    ),
 )
